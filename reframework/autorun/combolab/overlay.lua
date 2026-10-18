@@ -454,19 +454,36 @@ function Overlay.notes(S, W, H, sc, top)
     draw.outline_circle(cx, cy, R, rgba(255, 255, 255, 120), 48)
     if nxt then
         local w = nxt >= 2 and P:window(nxt) or nil
-        local per = (2 * math.pi) / A                   -- radians per frame
+        -- the hand makes one lap per note: it leaves 12 o'clock when the previous
+        -- note lands and is back at 12 o'clock exactly when this one does
+        local prev
+        if S.song then
+            prev = (nxt > 1 and T[nxt - 1]) or (S.song.fixed and nxt > 1 and S.song.fixed[nxt - 1]) or S.song.t0
+            if nxt > 1 and not T[nxt - 1] and live and live.anchor then prev = live.anchor end
+        else
+            prev = live and live.anchor or (T[nxt] - A)
+        end
+        local D = math.max(2, T[nxt] - prev)
+        local per = (2 * math.pi) / D                   -- radians per frame for this lap
+        local function arc(a, b)
+            local lim = math.pi * 0.95
+            return math.max(-lim, math.min(lim, a)), math.max(-lim, math.min(lim, b))
+        end
         -- window arc and sweet arc, positioned relative to the target frame (12 o'clock)
         if w then
-            ring_dots(cx, cy, R, (w.E - w.mid) * per, (w.L - w.mid) * per, with_alpha(C.cyan, 0.85), 3.2 * sc)
-            if w.sweet_lo then ring_dots(cx, cy, R, (w.sweet_lo - w.mid) * per, (w.sweet_hi - w.mid) * per, C.white, 3.8 * sc) end
+            local a0, a1 = arc((w.E - w.mid) * per, (w.L - w.mid) * per)
+            ring_dots(cx, cy, R, a0, a1, with_alpha(C.cyan, 0.85), 3.2 * sc)
+            if w.sweet_lo then
+                local s0, s1 = arc((w.sweet_lo - w.mid) * per, (w.sweet_hi - w.mid) * per)
+                ring_dots(cx, cy, R, s0, s1, C.white, 3.8 * sc)
+            end
         end
         if S.song and S.song.count then
             local pulse = 1 - (S.song.beat_phase or 0)
             draw.outline_circle(cx, cy, R + (4 + 10 * pulse) * sc, with_alpha(C.yellow, 0.3 + 0.6 * pulse), 48)
         end
-        -- countdown hand: a full turn over the approach, upright on the target frame
-        local left = T[nxt] - fnow
-        local a = -left * per
+        local p = math.max(0, math.min(1.08, (fnow - prev) / D))
+        local a = 2 * math.pi * p
         local hx, hy = cx + math.sin(a) * (R + 4 * sc), cy - math.cos(a) * (R + 4 * sc)
         draw.line(cx, cy, hx, hy, rgba(255, 255, 255, 235), 3 * sc)
         draw.filled_circle(hx, hy, 4.5 * sc, rgba(255, 255, 255, 255), 12)
@@ -480,7 +497,7 @@ function Overlay.notes(S, W, H, sc, top)
     end
 
     -- notes in flight
-    local dist = math.min(W * 0.34, 640 * sc)
+    local dist = math.min(W * 0.38, 720 * sc)
     for j = N, first, -1 do
         local Tj = T[j]
         if Tj then
@@ -504,17 +521,23 @@ function Overlay.notes(S, W, H, sc, top)
                     return a1 * sx + b1 * px + c1 * cx, a1 * sy + b1 * py + c1 * cy
                 end
                 local col = note_color(steps[j].label)
+                local cur = (j == nxt)
                 local fade = (u > 1) and math.max(0, 1 - (u - 1) / 0.12) or 1
+                local bright = cur and 1 or 0.45                 -- the note you're about to hit stands out
                 for tr = 5, 1, -1 do
                     local tx, ty = at(u - tr * 0.035)
-                    draw.filled_circle(tx, ty, (12 - tr) * sc, with_alpha(col, 0.10 * (6 - tr) * fade), 16)
+                    draw.filled_circle(tx, ty, (18 - 2 * tr) * sc, with_alpha(col, 0.10 * (6 - tr) * fade * bright), 16)
                 end
                 local x, y = at(u)
-                draw.filled_circle(x, y, 22 * sc, with_alpha(rgba(10, 12, 20), 0.9 * fade), 32)
-                draw.outline_circle(x, y, 22 * sc, with_alpha(col, fade), 32)
-                draw.outline_circle(x, y, 19 * sc, with_alpha(col, 0.6 * fade), 32)
-                if j ~= nxt or u < 0.92 then
-                    labels[#labels + 1] = { x = x, y = y, text = steps[j].label, col = with_alpha(col, fade) }
+                if cur then
+                    local pulse = 0.5 + 0.5 * math.sin(clock * 10)
+                    draw.filled_circle(x, y, R + (6 + 3 * pulse) * sc, with_alpha(col, 0.22 * fade), 40)
+                end
+                draw.filled_circle(x, y, R, with_alpha(rgba(10, 12, 20), (cur and 0.92 or 0.75) * fade), 40)
+                draw.outline_circle(x, y, R, with_alpha(col, fade * bright), 40)
+                draw.outline_circle(x, y, R - 4 * sc, with_alpha(col, 0.6 * fade * bright), 40)
+                if not cur or u < 0.92 then
+                    labels[#labels + 1] = { x = x, y = y, text = steps[j].label, col = with_alpha(col, fade * (cur and 1 or 0.6)), note = true }
                 end
             end
         end
@@ -750,8 +773,9 @@ function Overlay.draw(S)
 
         -- note labels
         if note_labels then
+            local f_note = font(24 * sc)
             for _, l in ipairs(note_labels) do
-                local f = (l.big or l.judge) and f_mid or f_sm
+                local f = (l.big or l.judge) and f_mid or (l.note and f_note or f_sm)
                 local tw, th = measure(l.text, f)
                 text_at(l.x - tw / 2, l.y - th / 2, l.text, l.col, f)
             end
