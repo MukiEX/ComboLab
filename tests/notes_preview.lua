@@ -10,6 +10,7 @@ local function fsize() return font_stack[#font_stack] or 13 end
 draw = {
     filled_rect = function(x, y, w, h, c) calls[#calls + 1] = { "rect", x, y, w, h, c } end,
     outline_rect = function(x, y, w, h, c) calls[#calls + 1] = { "orect", x, y, w, h, c } end,
+    filled_quad = function(a, b, c2, d, e, f, g, h, c) calls[#calls + 1] = { "quad", a, b, c2, d, e, f, g, h, c } end,
     filled_circle = function(x, y, r, c) calls[#calls + 1] = { "circle", x, y, r, c } end,
     outline_circle = function(x, y, r, c) calls[#calls + 1] = { "ocircle", x, y, r, c } end,
     line = function(x1, y1, x2, y2, c, t) calls[#calls + 1] = { "line", x1, y1, x2, y2, c, t or 1 } end,
@@ -28,10 +29,15 @@ local Profile = require("combolab.profile")
 local Overlay = require("combolab.overlay")
 local labels = { "2LK", "2LP", "2LP", "DR", "5LP", "5HK", "5LP", "5LK", "236MK" }
 local seps = { "start", ",", ",", ">", ">", ",", ",", ",", ">" }
+if os.getenv("LABELS") then
+    labels, seps = {}, {}
+    for l in os.getenv("LABELS"):gmatch("[^ ]+") do labels[#labels + 1] = l; seps[#seps + 1] = #seps == 0 and "start" or ">" end
+end
 local combo = { id = "x", hash = "h", name = "Mai: Lights DRC (example)", steps = {} }
 for i, l in ipairs(labels) do combo.steps[i] = { label = l, sep = seps[i], kind = (l == "DR") and "move" or "hit", trigger = { mask = 16 } } end
 local P = Profile.new(combo)
 local wins = { nil, { 6, 10 }, { 6, 10 }, { 3, 9 }, { 8, 12 }, { 9, 14 }, { 12, 16 }, { 6, 9 }, { 4, 10 } }
+for k = #wins + 1, #labels do wins[k] = { 6, 10 } end
 for k = 2, #labels do
     for _ = 1, 10 do
         local p = math.random(wins[k][1], wins[k][2])
@@ -48,7 +54,7 @@ local start_tick = 96
 local S = { mode = "train", combo = combo, profile = P, tracker = tracker, last = nil, result_age = 99,
     stats = { n = 7, ok = 5, streak = 3, best = 4 }, msg_age = 99, version = "1.4.0", attempt_seq = 1,
     cfg = { scale = 1.0, y = 0.25, result_seconds = 4, train_view = os.getenv("VIEW") or "notes", note_approach = 36, note_palette = os.getenv("PAL") or "classic",
-        song_mode = os.getenv("SONG") == "1", song_approach = 80, song_beat = 30 } }
+        song_mode = os.getenv("SONG") == "1", motion_arrows = os.getenv("ARROWS") == "1", song_approach = 80, song_beat = 30 } }
 -- simulate: the player hits each step on its target frame
 local function target(k) return P:window(k).mid end
 local hit = {}

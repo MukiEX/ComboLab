@@ -74,6 +74,121 @@ local function measure(s, f)
     return v.x, v.y
 end
 
+local function with_alpha(col, a)
+    local al = math.max(0, math.min(255, math.floor(((col >> 24) & 255) * a)))
+    return (col & 0x00FFFFFF) | (al << 24)
+end
+
+-- --------------------------------------------------------------------------
+-- motion arrows: labels laid out as glyph + text items
+-- --------------------------------------------------------------------------
+local Motion = require("combolab.motion")
+local glyph_cache = {}
+local function glyph_of(p)
+    local key = p.t .. ":" .. tostring(p.seq or p.d or "")
+    local g = glyph_cache[key]
+    if not g then g = Motion.glyph(p); glyph_cache[key] = g end
+    return g
+end
+
+-- items: { t = "text", s, w } | { t = "glyph", g, w, gh, pad }
+local function rich(label, f, arrows)
+    label = tostring(label or "")
+    if not arrows then
+        local w = measure(label, f)
+        return { { t = "text", s = label, w = w } }, w
+    end
+    local _, th = measure("Ag", f)
+    local gh = th * 0.92
+    local items, total = {}, 0
+    for _, p in ipairs(Motion.parse(label)) do
+        local it
+        if p.t == "text" then
+            it = { t = "text", s = p.s, w = measure(p.s, f) }
+        else
+            local g = glyph_of(p)
+            it = { t = "glyph", g = g, gh = gh, pad = th * 0.07, w = gh * g.aspect + th * 0.14 }
+        end
+        items[#items + 1] = it
+        total = total + it.w
+    end
+    return items, total
+end
+Overlay.rich = rich
+
+local function alpha_of(col) return ((col >> 24) & 255) / 255 end
+
+local function stroke(pts, w, col)
+    local r = w / 2
+    for i = 1, #pts - 3, 2 do
+        local x1, y1, x2, y2 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
+        local dx, dy = x2 - x1, y2 - y1
+        local l = math.sqrt(dx * dx + dy * dy)
+        if l > 0.01 then
+            local nx, ny = -dy / l * r, dx / l * r
+            if draw.filled_quad then
+                draw.filled_quad(x1 + nx, y1 + ny, x2 + nx, y2 + ny, x2 - nx, y2 - ny, x1 - nx, y1 - ny, col)
+            else
+                draw.line(x1, y1, x2, y2, col, w)
+            end
+        end
+    end
+    for i = 1, #pts, 2 do draw.filled_circle(pts[i], pts[i + 1], r, col, 12) end
+end
+
+-- draws one glyph with its top-left at (x, y), height h
+local function draw_glyph(g, x, y, h, col)
+    local sw = math.max(2, h * 0.16)
+    local hl, hw = sw * 2.0, sw * 1.65               -- arrowhead length / half width
+    local ol = math.max(1.5, sw * 0.35)              -- dark outline
+    local dark = with_alpha(rgba(0, 0, 0, 230), alpha_of(col))
+    local hx, hy = x + g.head[1] * h, y + g.head[2] * h
+    local dx, dy = g.head[3], g.head[4]
+    local px = {}
+    for i, l in ipairs(g.lines) do
+        local q = {}
+        for j = 1, #l, 2 do q[j] = x + l[j] * h; q[j + 1] = y + l[j + 1] * h end
+        if i == 1 then
+            -- pull the stroke back so it ends inside the arrowhead
+            local cut = hl * 0.6
+            while #q > 2 and math.sqrt((q[#q - 1] - hx) ^ 2 + (q[#q] - hy) ^ 2) < cut do q[#q] = nil; q[#q] = nil end
+            q[#q + 1] = hx - dx * cut; q[#q + 1] = hy - dy * cut
+        end
+        px[i] = q
+    end
+    local function head(grow, c)
+        local bx, by = hx - dx * hl, hy - dy * hl
+        local nx, ny = -dy, dx
+        local tx, ty = hx + dx * grow * 1.6, hy + dy * grow * 1.6
+        local w = hw + grow
+        local ax, ay = bx - dx * grow + nx * w, by - dy * grow + ny * w
+        local cx, cy = bx - dx * grow - nx * w, by - dy * grow - ny * w
+        if draw.filled_quad then
+            draw.filled_quad(tx, ty, ax, ay, bx + dx * hl * 0.25, by + dy * hl * 0.25, cx, cy, c)
+        else
+            draw.line(ax, ay, tx, ty, c, sw); draw.line(cx, cy, tx, ty, c, sw)
+        end
+    end
+    for _, q in ipairs(px) do stroke(q, sw + ol * 2, dark) end
+    head(ol, dark)
+    for _, q in ipairs(px) do stroke(q, sw, col) end
+    head(0, col)
+end
+
+-- glyph pass (draw layer) and text pass (imgui layer) for a laid-out label
+local function rich_glyphs(items, x, y, th, col)
+    for _, it in ipairs(items) do
+        if it.t == "glyph" then draw_glyph(it.g, x + it.pad, y + (th - it.gh) / 2, it.gh, col) end
+        x = x + it.w
+    end
+end
+local function rich_text(items, x, y, col, f)
+    for _, it in ipairs(items) do
+        if it.t == "text" then text_at(x, y, it.s, col, f) end
+        x = x + it.w
+    end
+end
+
 local function fmt_range(a, b)
     if a == nil then return "-" end
     if b == nil or a == b then return tostring(math.floor(a)) end
@@ -376,11 +491,6 @@ local function ring_dots(cx, cy, r, a0, a1, col, dot, n)
     end
 end
 
-local function with_alpha(col, a)
-    local al = math.max(0, math.min(255, math.floor(((col >> 24) & 255) * a)))
-    return (col & 0x00FFFFFF) | (al << 24)
-end
-
 function Overlay.notes(S, W, H, sc, top)
     cur_palette = PALETTES[S.cfg.note_palette or "classic"] or PALETTES.classic
     local P, combo = S.profile, S.combo
@@ -487,12 +597,12 @@ function Overlay.notes(S, W, H, sc, top)
         local hx, hy = cx + math.sin(a) * (R + 4 * sc), cy - math.cos(a) * (R + 4 * sc)
         draw.line(cx, cy, hx, hy, rgba(255, 255, 255, 235), 3 * sc)
         draw.filled_circle(hx, hy, 4.5 * sc, rgba(255, 255, 255, 255), 12)
-        labels[#labels + 1] = { x = cx, y = cy, text = steps[nxt].label, col = note_color(steps[nxt].label), big = true }
+        labels[#labels + 1] = { x = cx, y = cy, text = steps[nxt].label, col = note_color(steps[nxt].label), big = true, step = true }
     elseif not live and not S.song then
         -- idle: breathing ring on the first step
         local pulse = 0.5 + 0.5 * math.sin(clock * 4)
         draw.outline_circle(cx, cy, R + (3 + 4 * pulse) * sc, with_alpha(note_color(steps[1].label), 0.4 + 0.5 * pulse), 48)
-        labels[#labels + 1] = { x = cx, y = cy, text = steps[1].label, col = note_color(steps[1].label), big = true }
+        labels[#labels + 1] = { x = cx, y = cy, text = steps[1].label, col = note_color(steps[1].label), big = true, step = true }
         labels[#labels + 1] = { x = cx, y = cy + R + 18 * sc, text = "start when ready", col = C.dim }
     end
 
@@ -537,7 +647,7 @@ function Overlay.notes(S, W, H, sc, top)
                 draw.outline_circle(x, y, R, with_alpha(col, fade * bright), 40)
                 draw.outline_circle(x, y, R - 4 * sc, with_alpha(col, 0.6 * fade * bright), 40)
                 if not cur or u < 0.92 then
-                    labels[#labels + 1] = { x = x, y = y, text = steps[j].label, col = with_alpha(col, fade * (cur and 1 or 0.6)), note = true }
+                    labels[#labels + 1] = { x = x, y = y, text = steps[j].label, col = with_alpha(col, fade * (cur and 1 or 0.6)), note = true, step = true }
                 end
             end
         end
@@ -646,7 +756,7 @@ function Overlay.draw(S)
         if k > 1 then
             local sp = st.sep or ">"
             if sp == "," then sp = ", " elseif sp == "~" then sp = " ~ " else sp = " " .. sp .. " " end
-            pieces[#pieces + 1] = { sp, C.dim }
+            pieces[#pieces + 1] = { sp, C.dim, sep = true }
         end
         local col = C.white
         local o = shown and shown.steps and shown.steps[k]
@@ -654,7 +764,11 @@ function Overlay.draw(S)
         if live and live.c == k and not live.failed then col = C.yellow end
         pieces[#pieces + 1] = { st.label, col }
     end
-    for _, p in ipairs(pieces) do p.w = measure(p[1], f_mid); total = total + p.w end
+    local arrows = cfg.motion_arrows == true
+    for _, p in ipairs(pieces) do
+        p.items, p.w = rich(p[1], f_mid, arrows and not p.sep)
+        total = total + p.w
+    end
     local _, line_h = measure("Ag", f_mid)
     local ny = notes_ny or (by + bh + 34 * sc)
     local ry = notes_bottom or (ny + line_h + 18 * sc)
@@ -703,6 +817,21 @@ function Overlay.draw(S)
     local res_f = combo and f_big or f_sm
     local pad = 12 * sc
     if N > 0 then panel(W / 2 - total / 2 - pad, ny - pad * 0.6, total + pad * 2, line_h + pad * 1.2) end
+    if arrows then
+        local gx = W / 2 - total / 2
+        for _, p in ipairs(pieces) do rich_glyphs(p.items, gx, ny, line_h, p[2]); gx = gx + p.w end
+    end
+    -- note labels: lay out now so their arrows go on the draw layer
+    local f_note = font(24 * sc)
+    if note_labels then
+        for _, l in ipairs(note_labels) do
+            l.f = (l.big or l.judge) and f_mid or (l.note and f_note or f_sm)
+            l.items, l.w = rich(l.text, l.f, arrows and l.step)
+            local _, th = measure("Ag", l.f)
+            l.th = th
+            if arrows and l.step then rich_glyphs(l.items, l.x - l.w / 2, l.y - th / 2, th, l.col) end
+        end
+    end
     local res_w, res_h, hint_w, hint_h = 0, 0, 0, 0
     if res_s then
         res_w, res_h = measure(res_s, res_f)
@@ -767,17 +896,14 @@ function Overlay.draw(S)
         -- notation line, each step colored by its state
         local x = W / 2 - total / 2
         for _, p in ipairs(pieces) do
-            text_at(x, ny, p[1], p[2], f_mid)
+            rich_text(p.items, x, ny, p[2], f_mid)
             x = x + p.w
         end
 
         -- note labels
         if note_labels then
-            local f_note = font(24 * sc)
             for _, l in ipairs(note_labels) do
-                local f = (l.big or l.judge) and f_mid or (l.note and f_note or f_sm)
-                local tw, th = measure(l.text, f)
-                text_at(l.x - tw / 2, l.y - th / 2, l.text, l.col, f)
+                rich_text(l.items, l.x - l.w / 2, l.y - l.th / 2, l.col, l.f)
             end
         end
 

@@ -83,6 +83,8 @@ details.lib-sec > summary span { color: var(--muted); font-weight: 400; }
 .chip .kind { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
 .chip.err { border-color: var(--critical); }
 .chip.sel { border-color: var(--accent); }
+.lbl { display: inline-flex; align-items: center; white-space: nowrap; }
+svg.mo { height: 1.3em; vertical-align: -0.28em; overflow: visible; flex: none; }
 .sep { font: 15px var(--mono); color: var(--muted); padding: 0 1px; }
 .override { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--ring); }
 .error { color: var(--critical); font-size: 12.5px; }
@@ -225,6 +227,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
         <label class="f">Note flight <input type="range" id="optApproach" min="18" max="72" step="2" value="36"></label>
         <label class="f">Note colours <select id="optPalette"><option value="classic">Classic (red / white / blue)</option><option value="sf6">SF6 (blue / yellow / red)</option></select></label>
         <label class="switch"><input type="checkbox" id="optFlip"> Kicks from the left</label>
+        <label class="switch"><input type="checkbox" id="optArrows"> Motion arrows <span class="muted">(623 as an arrow)</span></label>
       </div>
       <div class="row" style="margin-top:12px;gap:22px;align-items:flex-end">
         <label class="switch"><input type="checkbox" id="optSong"> Song mode <span class="muted">(count-in, fixed timeline)</span></label>
@@ -393,10 +396,107 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.5.2";
+const PAGE_VERSION = "1.6.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// ---------------------------------------------------------------- motion arrows
+// Mirrors reframework/autorun/combolab/motion.lua: "623HP" -> Z arrow + "HP".
+const MO_ANG = {6: 0, 3: 1, 2: 2, 1: 3, 4: 4, 7: 5, 8: 6, 9: 7};
+const moPos = d => d === 5 ? [0, 0] : [Math.cos(MO_ANG[d] * Math.PI / 4), Math.sin(MO_ANG[d] * Math.PI / 4)];
+const moRing = (a, b) => { if (a === 5 || b === 5) return null; let s = ((MO_ANG[b] - MO_ANG[a]) % 8 + 8) % 8; return s > 4 ? s - 8 : s; };
+
+function motionParts(label) {
+  label = String(label ?? "");
+  const parts = [], text = s => { if (s) parts.push({t: "text", s}); };
+  const up = label.toUpperCase();
+  if (up === "66" || up === "44") return [{t: "motion", seq: up[0]}, {t: "motion", seq: up[0]}];
+  if (label.includes("~")) {
+    label.split("~").filter(Boolean).forEach((piece, i) => { if (i) text("~"); parts.push(...motionParts(piece)); });
+    return parts;
+  }
+  let body = label;
+  if (/^j\./i.test(body)) { text(body.slice(0, 2)); body = body.slice(2); }
+  if (/^cr\./i.test(body)) body = "2" + body.slice(3); else if (/^st\./i.test(body)) body = "5" + body.slice(3);
+  let charge = null, m = body.match(/^\[(\d)\](.*)$/);
+  if (m) { charge = m[1]; body = m[2]; }
+  m = body.match(/^(\d*)(.*)$/);
+  let digits = m[1]; const btn = m[2];
+  if (!charge && !digits) return [{t: "text", s: label}];
+  if (charge) { if (charge === "5") return [{t: "text", s: label}]; text("["); parts.push({t: "motion", seq: charge}); text("]"); }
+  if (digits === "360" || digits === "720") { parts.push({t: "circle"}); if (digits === "720") parts.push({t: "circle"}); }
+  else if (digits) {
+    if (digits.includes("0")) return [{t: "text", s: label}];
+    digits = digits.replace(/^5+/, "");
+    if (digits) {
+      const n = digits.length, h = n >> 1;
+      if (n >= 2 && n % 2 === 0 && digits.slice(0, h) === digits.slice(h) && !digits.includes("5"))
+        parts.push({t: "motion", seq: digits.slice(0, h)}, {t: "motion", seq: digits.slice(0, h)});
+      else parts.push({t: "motion", seq: digits});
+    }
+  }
+  text(btn);
+  return parts.length ? parts : [{t: "text", s: label}];
+}
+
+function motionGlyph(p) {
+  const arc = (out, a0, a1) => { const n = Math.max(2, Math.ceil(Math.abs(a1 - a0) / (Math.PI / 24))); for (let i = 1; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; out.push([Math.cos(a), Math.sin(a)]); } };
+  let line = [], arcEnd = null, fixed = null;
+  if (p.t === "circle") { line.push([1, 0]); arc(line, 0, Math.PI * 2 * 0.86); }
+  else {
+    const seq = [...p.seq].map(Number);
+    if (seq.length === 1) { const [x, y] = moPos(seq[0]); line = [[-x * 0.9, -y * 0.9], [x * 0.9, y * 0.9]]; fixed = 0.6 + 0.5 * Math.abs(x); }
+    else {
+      const rs = moRing(seq[0], seq[1]);
+      if (rs !== null && Math.abs(rs) === 2) seq.unshift(5);
+      line.push(moPos(seq[0]));
+      for (let i = 1; i < seq.length; i++) {
+        const a = seq[i - 1], b = seq[i], s = moRing(a, b);
+        if (s !== null && Math.abs(s) === 1) { const a0 = MO_ANG[a] * Math.PI / 4; arc(line, a0, a0 + s * Math.PI / 4); arcEnd = b; }
+        else if (a !== b) { line.push(moPos(b)); arcEnd = null; }
+      }
+    }
+  }
+  const xs = line.map(q => q[0]), ys = line.map(q => q[1]);
+  const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+  const bw = maxx - minx, bh = maxy - miny, span = Math.max(bw, bh, 0.01);
+  const aspect = fixed ?? Math.max(0.55, Math.min(1.9, Math.max(bw, 0.5 * span) / Math.max(bh, 0.5 * span)));
+  const s = Math.min(aspect / Math.max(bw, 0.01), 1 / Math.max(bh, 0.01));
+  const ox = (aspect - bw * s) / 2 - minx * s, oy = (1 - bh * s) / 2 - miny * s;
+  const pts = line.map(([x, y]) => [x * s + ox, y * s + oy]);
+  const n = pts.length;
+  let dx = pts[n - 1][0] - pts[n - 2][0], dy = pts[n - 1][1] - pts[n - 2][1], dl = Math.hypot(dx, dy) || 1;
+  dx /= dl; dy /= dl;
+  if (arcEnd !== null) { const [rx, ry] = moPos(arcEnd); dx += rx; dy += ry; dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl; }
+  return {pts, head: [pts[n - 1][0], pts[n - 1][1], dx, dy], aspect};
+}
+
+const glyphSvgCache = {};
+function glyphSvg(p) {
+  const key = p.t + (p.seq || "");
+  if (glyphSvgCache[key]) return glyphSvgCache[key];
+  const g = motionGlyph(p), sw = 0.16, hl = sw * 2, hw = sw * 1.65, cut = hl * 0.6;
+  const [hx, hy, dx, dy] = g.head;
+  const pts = g.pts.slice();
+  while (pts.length > 2 && Math.hypot(pts[pts.length - 1][0] - hx, pts[pts.length - 1][1] - hy) < cut) pts.pop();
+  pts.push([hx - dx * cut, hy - dy * cut]);
+  const f = v => v.toFixed(3);
+  const d = pts.map((q, i) => (i ? "L" : "M") + f(q[0]) + " " + f(q[1])).join("");
+  const bx = hx - dx * hl, by = hy - dy * hl, nx = -dy, ny = dx;
+  const head = [[hx, hy], [bx + nx * hw, by + ny * hw], [bx + dx * hl * 0.25, by + dy * hl * 0.25], [bx - nx * hw, by - ny * hw]].map(q => f(q[0]) + "," + f(q[1])).join(" ");
+  const pad = 0.2, W = g.aspect + pad * 2, H = 1 + pad * 2;
+  const svg = `<svg class="mo" viewBox="${-pad} ${-pad} ${f(W)} ${f(H)}" style="width:${f(W / H * 1.3)}em" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/><polygon points="${head}" fill="currentColor"/></svg>`;
+  return (glyphSvgCache[key] = svg);
+}
+
+// A step label as HTML: motion arrows when the option is on, else plain text.
+function labelHTML(label) {
+  if (!$("optArrows") || !$("optArrows").checked) return esc(label);
+  const parts = motionParts(label);
+  if (parts.every(p => p.t === "text")) return esc(label);
+  return `<span class="lbl" title="${esc(label)}">` + parts.map(p => p.t === "text" ? esc(p.s) : glyphSvg(p)).join("") + `</span>`;
+}
+
 const RES_LABEL = {ok:"clean", early:"early", late:"late", wrong:"wrong move", missed:"missed", eaten:"eaten", whiff:"whiff", skipped:"skipped", spam:"spam", pending:"-"};
 const REASONS = [["early","Early","--c-early"],["late","Late","--c-late"],["wrong","Wrong move","--c-wrong"],["missed","Missed / eaten","--c-missed"],["spam","Spam","--c-spam"],["other","Other","--c-other"]];
 const reasonOf = r => r === "early" ? "early" : r === "late" ? "late" : r === "wrong" ? "wrong" : (r === "missed" || r === "eaten") ? "missed" : r === "spam" ? "spam" : "other";
@@ -661,7 +761,7 @@ function renderChips() {
     const w = win && win[i];
     const wtxt = w && w.n ? ` · ${w.E}–${w.L}f` : "";
     return `${sep}<button class="chip ${s.error ? "err" : ""} ${st.overrideIdx === i ? "sel" : ""}" data-i="${i}" title="${esc(s.error || "click to adjust")}">
-      <span>${esc(s.label)}</span>
+      <span>${labelHTML(s.label)}</span>
       <span class="k"><span class="kind" style="background:var(--${s.kind === "move" ? "move" : "hit"})"></span>${s.kind === "move" ? "move" : "hit"} · ${esc(triggerText(s.trigger, d.control))}${wtxt}${s.overridden ? " ·" + " edited" : ""}</span>
     </button>`;
   }).join("");
@@ -680,7 +780,7 @@ function renderOverride(steps) {
   const cur = JSON.stringify(s.trigger);
   box.innerHTML = `<div class="override">
     <div class="row" style="align-items:flex-end">
-      <b style="font-family:var(--mono);font-size:16px">${esc(s.label)}</b>
+      <b style="font-family:var(--mono);font-size:16px">${labelHTML(s.label)}</b>
       <label class="f">Counts as
         <select id="ovKind"><option value="hit">Hit (must connect)</option><option value="move">Movement (DR, dash, jump)</option></select></label>
       <label class="f">Trigger (the press we time)
@@ -744,6 +844,7 @@ function optionsFromForm() {
     scale: +$("optScale").value, y: +$("optY").value,
     rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked,
     train_view: $("optView").value, note_approach: +$("optApproach").value, note_flip: $("optFlip").checked, note_palette: $("optPalette").value,
+    motion_arrows: $("optArrows").checked,
     song_mode: $("optSong").checked, song_follow: $("optFollow").checked, song_approach: +$("optSongApproach").value, song_beat: +$("optSongBeat").value,
   };
 }
@@ -757,6 +858,7 @@ function optionsToForm(o) {
   if (o.train_view) $("optView").value = o.train_view;
   if (o.note_approach) $("optApproach").value = o.note_approach;
   $("optFlip").checked = !!o.note_flip;
+  if (o.motion_arrows != null && $("optArrows").checked !== !!o.motion_arrows) { $("optArrows").checked = !!o.motion_arrows; try { renderChips(); renderTabs(); } catch (e) {} }
   if (o.note_palette) $("optPalette").value = o.note_palette;
   $("optSong").checked = !!o.song_mode; $("optFollow").checked = !!o.song_follow;
   if (o.song_approach) $("optSongApproach").value = o.song_approach;
@@ -853,7 +955,7 @@ function renderProfile() {
     const w = W[i] || {}; const sm = arr(P.steps[i]?.samples);
     const okN = sm.filter(x => x.res === "ok").length;
     const rng = (a, b) => (a == null ? "–" : (a === b || b == null) ? `${a}` : `${a}–${b}`);
-    html += `<tr><td class="muted">${i + 1}</td><td class="m">${esc(s.label)}</td><td class="muted">${i ? (s.sep === "," ? "link" : s.sep === "~" ? "chain" : "cancel") : "start"}</td>
+    html += `<tr><td class="muted">${i + 1}</td><td class="m">${labelHTML(s.label)}</td><td class="muted">${i ? (s.sep === "," ? "link" : s.sep === "~" ? "chain" : "cancel") : "start"}</td>
       <td>${i ? `${okN} / ${sm.length}` : "–"}</td>
       <td>${w.n ? `<b>${rng(w.E, w.L)}</b> <span class="muted">(${w.L - w.E + 1}f)</span>` : "–"}</td>
       <td>${w.sweet_lo != null ? `<b>${rng(w.sweet_lo, w.sweet_hi)}</b> <span class="muted">(${Math.round(100 * w.sweet_rate)}% next hits vs ${Math.round(100 * (w.next_rate || 0))}% overall, ${w.sweet_n} runs)</span>` : (w.n && i < steps.length - 1 ? `<span class="muted">${w.sweet_n || 0}/8 runs</span>` : "–")}</td>
@@ -920,15 +1022,15 @@ function renderTrain() {
   html += `<div class="chart"><table class="t" style="margin:14px 0;min-width:520px"><thead><tr><th>#</th><th>Step</th><th>Graded presses</th><th>In window</th><th>Early (avg)</th><th>Late (avg)</th></tr></thead><tbody>`;
   steps.forEach((s, i) => {
     if (!i) return;
-    const a = offs[i]; if (!a.length) { html += `<tr><td class="muted">${i + 1}</td><td class="m">${esc(s.label)}</td><td colspan="4" class="muted">–</td></tr>`; return; }
+    const a = offs[i]; if (!a.length) { html += `<tr><td class="muted">${i + 1}</td><td class="m">${labelHTML(s.label)}</td><td colspan="4" class="muted">–</td></tr>`; return; }
     const inw = a.filter(x => x === 0).length, e = a.filter(x => x < 0), l = a.filter(x => x > 0);
     const avg = v => v.length ? ` <span class="muted">(${(v.reduce((x, y) => x + y, 0) / v.length > 0 ? "+" : "")}${(v.reduce((x, y) => x + y, 0) / v.length).toFixed(1)}f)</span>` : "";
-    html += `<tr><td class="muted">${i + 1}</td><td class="m">${esc(s.label)}</td><td>${a.length}</td><td>${Math.round(100 * inw / a.length)}%</td><td>${e.length}${avg(e)}</td><td>${l.length}${avg(l)}</td></tr>`;
+    html += `<tr><td class="muted">${i + 1}</td><td class="m">${labelHTML(s.label)}</td><td>${a.length}</td><td>${Math.round(100 * inw / a.length)}%</td><td>${e.length}${avg(e)}</td><td>${l.length}${avg(l)}</td></tr>`;
   });
   html += `</tbody></table></div>`;
   html += `<h3 style="font-size:13px;margin:4px 0 6px">Recent attempts</h3>`;
   html += list.slice(-15).reverse().map(a => `<div class="attempt"><span class="badge" style="color:${a.ok ? "var(--good)" : "var(--critical)"}">${a.ok ? "✓ clean" : "✕ " + esc(RES_LABEL[a.result] || a.result)}</span>
-    <span class="stepres">${arr(a.steps).map((o, i) => `<span class="${o.res === "ok" ? "ok" : o.res === "pending" ? "" : "bad"}" title="${esc(o.hint || "")}">${esc(steps[i]?.label || "?")}${typeof o.off === "number" && o.off ? ` ${o.off > 0 ? "+" : ""}${o.off}` : ""}</span>`).join("")}</span>
+    <span class="stepres">${arr(a.steps).map((o, i) => `<span class="${o.res === "ok" ? "ok" : o.res === "pending" ? "" : "bad"}" title="${esc(o.hint || "")}">${labelHTML(steps[i]?.label || "?")}${typeof o.off === "number" && o.off ? ` ${o.off > 0 ? "+" : ""}${o.off}` : ""}</span>`).join("")}</span>
     <span class="grow"></span><span class="muted" style="font-size:12px">${new Date(a.time * 1000).toLocaleTimeString()}</span></div>`).join("");
   box.innerHTML = html;
   box.querySelectorAll(".hov2").forEach(el => { el.addEventListener("mousemove", e => showTip(e, esc(el.dataset.t))); el.addEventListener("mouseleave", hideTip); });
@@ -1050,6 +1152,8 @@ renderTabs();
 
 ["fighter", "control", "name", "notation"].forEach(id => $(id).addEventListener("input", () => { readForm(); renderChips(); }));
 $("fighter").addEventListener("change", () => { if (libFilter === "follow") renderLibrary(); });
+$("optArrows").onchange = () => { try { localStorage.setItem("combolab_arrows", $("optArrows").checked ? "1" : "0"); } catch (e) {} renderChips(); renderTabs(); };
+try { $("optArrows").checked = localStorage.getItem("combolab_arrows") === "1"; } catch (e) {}
 $("libFilter").onchange = e => { libFilter = e.target.value; try { localStorage.setItem("combolab_libfilter", libFilter); } catch (er) {} renderLibrary(); };
 $("btnNew").onclick = () => { st.sel = null; st.draft = newDraft(); st.profile = null; st.session = null; loadDraftIntoForm(); renderLibrary(); renderTabs(); $("notation").focus(); };
 $("btnSave").onclick = saveDraft;

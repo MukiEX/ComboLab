@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.5.2"
+local VERSION = "1.6.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -33,6 +33,7 @@ local DEFAULTS = {
     note_approach = 36,        -- note flight time in frames
     note_flip = false,
     note_palette = "classic",
+    motion_arrows = false,
     song_mode = false,         -- Train: count-in, then the whole combo on a fixed timeline
     song_beat = 30,            -- count-in beat length in frames
     song_approach = 80,        -- note flight time in song mode (frames)
@@ -306,7 +307,7 @@ local last_poll, last_status = 0, 0
 
 local function apply_options(o)
     if type(o) ~= "table" then return end
-    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo" }) do
+    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows" }) do
         if o[k] ~= nil then cfg[k] = o[k] == true end
     end
     if o.train_view == "bar" or o.train_view == "notes" or o.train_view == "both" then cfg.train_view = o.train_view end
@@ -398,6 +399,7 @@ local function write_status()
             user_side = cfg.user_side, overlay = cfg.overlay, enabled = cfg.enabled,
             rhythm = cfg.rhythm, rhythm_demo = cfg.rhythm_demo,
             train_view = cfg.train_view, note_approach = cfg.note_approach, note_flip = cfg.note_flip, note_palette = cfg.note_palette,
+            motion_arrows = cfg.motion_arrows,
             song_mode = cfg.song_mode, song_follow = cfg.song_follow, song_approach = cfg.song_approach, song_beat = cfg.song_beat,
         },
         bot = S.bot:status(),
@@ -541,6 +543,8 @@ re.on_draw_ui(function()
     if changed then cfg.note_approach = v; save_cfg() end
     changed, v = imgui.combo("Note colours", cfg.note_palette == "sf6" and 2 or 1, { "Classic (red / white / blue)", "SF6 (blue / yellow / red)" })
     if changed then cfg.note_palette = (v == 2) and "sf6" or "classic"; save_cfg() end
+    changed, v = imgui.checkbox("Motion arrows instead of numbers (623 -> Z arrow)", cfg.motion_arrows == true)
+    if changed then cfg.motion_arrows = v; save_cfg() end
     changed, v = imgui.checkbox("Song mode (count-in, fixed timeline)", cfg.song_mode == true)
     if changed then cfg.song_mode = v; S.song = nil; save_cfg() end
     imgui.same_line()

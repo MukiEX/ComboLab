@@ -9,6 +9,10 @@ local function fsize() return font_stack[#font_stack] or 13 end
 draw = {
     filled_rect = function(x, y, w, h, c) calls[#calls + 1] = { "rect", x, y, w, h, c } end,
     outline_rect = function(x, y, w, h, c) calls[#calls + 1] = { "orect", x, y, w, h, c } end,
+    filled_circle = function(x, y, r, c) calls[#calls + 1] = { "circle", x, y, r, c } end,
+    outline_circle = function(x, y, r, c) calls[#calls + 1] = { "ocircle", x, y, r, c } end,
+    line = function(x1, y1, x2, y2, c, t) calls[#calls + 1] = { "line", x1, y1, x2, y2, c, t or 1 } end,
+    filled_quad = function(a, b, c2, d, e, f, g, h, c) calls[#calls + 1] = { "quad", a, b, c2, d, e, f, g, h, c } end,
 }
 imgui = setmetatable({
     get_display_size = function() return { x = 1920, y = 1080 } end,
@@ -47,9 +51,9 @@ local last = { ok = false, fail_step = 8, steps = {} }
 for k = 1, 7 do last.steps[k] = { res = "ok", p = k > 1 and (wins[k][1] + 2) or nil, off = 0 } end
 last.steps[3].off = 0
 last.steps[8] = { res = "late", p = wins[8][2] + 3, off = 3, hint = "came out but did not connect (late or out of range)" }
-local S = { mode = mode, combo = combo, profile = P, tracker = { live_detail = function() return nil end },
+local S = { mode = mode, combo = combo, profile = P, tracker = { live_detail = function() return nil end, now = function() return 0 end },
     last = last, result_age = tonumber(arg[4] or "1"), stats = { n = 20, ok = 13, streak = 2, best = 6 },
-    cfg = { scale = 1.0, y = 0.25, result_seconds = 4, spam_block = true, show_detail = (mode == "develop") }, msg_age = 99 }
+    cfg = { scale = 1.0, y = 0.25, result_seconds = 4, spam_block = true, show_detail = (mode == "develop"), motion_arrows = os.getenv("ARROWS") == "1" }, msg_age = 99 }
 Overlay.draw(S)
 local out = {}
 for _, c in ipairs(calls) do

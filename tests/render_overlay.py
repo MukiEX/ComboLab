@@ -25,6 +25,8 @@ for c in json.load(open(calls_path)):
         x, y, r, cc = c[1:5]; d.ellipse([x - r, y - r, x + r, y + r], outline=col(cc), width=2)
     elif k == "line":
         x1, y1, x2, y2, cc, t = c[1:7]; d.line([x1, y1, x2, y2], fill=col(cc), width=max(1, int(t)))
+    elif k == "quad":
+        pts = c[1:9]; cc = c[9]; d.polygon([(pts[i], pts[i + 1]) for i in range(0, 8, 2)], fill=col(cc))
     elif k == "text":
         x, y, s, cc, px = c[1:]; d.text((x, y), s, fill=col(cc), font=font(px))
 Image.alpha_composite(img, layer).convert("RGB").save(out)
