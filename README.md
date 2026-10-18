@@ -12,7 +12,7 @@ Training mode only. The mod does nothing online.
 ## Install
 
 1. Install [REFramework](https://github.com/praydog/REFramework-nightly/releases) for SF6 (put `dinput8.dll` in the game folder).
-2. Extract this zip straight into your SF6 game folder (the one with `StreetFighter6.exe`), letting it merge into `reframework` and overwrite older ComboLab files. The overlay tag (DEVELOP / TRAIN) shows the loaded version.
+2. Copy the `reframework` folder into your SF6 game folder (the one with `StreetFighter6.exe`), merging with the existing one and overwriting older ComboLab files. The overlay tag (DEVELOP / TRAIN) shows the loaded version.
 3. Open `reframework/data/ComboLab/ComboLab.html` in **Chrome or Edge**.
 4. Click **Choose folder** and select the SF6 game folder. The page finds `reframework/data/ComboLab` by itself.
    - The browser remembers the folder, but may ask you to click **Reconnect** in later sessions.

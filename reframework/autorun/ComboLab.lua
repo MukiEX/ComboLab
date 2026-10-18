@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.4.1"
+local VERSION = "1.4.2"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -76,9 +76,26 @@ local fighter_id, modern = nil, false
 local clock_result, clock_msg = 0, 0
 local last_error = nil
 
+-- writes to re2_framework_log.txt (REFramework's log) when available
+local function L(fmt, ...)
+    local ok, msg = pcall(string.format, fmt, ...)
+    msg = "[ComboLab] " .. (ok and msg or tostring(fmt))
+    if log and log.info then pcall(log.info, msg) end
+end
+
 local function flash(m)
     S.msg = m
     clock_msg = os.clock()
+    L("%s", m)
+end
+
+-- json.load_file logs an error for files that don't exist yet; check first
+local function exists(dir, name)
+    -- fs.glob takes a regex; ids are [a-z0-9-] so only the dot needs escaping
+    local pat = "ComboLab\\\\" .. dir .. "\\\\" .. (name:gsub("%.", "\\.")) .. "$"
+    local ok, files = pcall(fs.glob, pat)
+    if not ok or type(files) ~= "table" then return true end
+    return #files > 0
 end
 
 local function int(v) return math.tointeger(tonumber(v) or 0) or 0 end
@@ -134,7 +151,7 @@ end
 
 local session = nil
 local function load_session(id)
-    local t = json.load_file(session_path(id))
+    local t = exists("sessions", id .. ".json") and json.load_file(session_path(id)) or nil
     if type(t) ~= "table" or type(t.attempts) ~= "table" then t = { combo_id = id, attempts = {} } end
     session = t
     -- train stats for today's run start fresh; history stays in the file
@@ -146,7 +163,7 @@ local function load_combo(id)
         if e.id == id then
             local c = normalize_combo(json.load_file(e.path))
             if not c then flash("ComboLab: could not read " .. e.path) return false end
-            local raw = json.load_file(profile_path(c.id))
+            local raw = exists("profiles", c.id .. ".json") and json.load_file(profile_path(c.id)) or nil
             local prof, reset = Profile.from_table(raw, c)
             prof.ignore_spam = cfg.ignore_spam_samples
             S.combo, S.profile = c, prof
@@ -259,6 +276,7 @@ S.bot = Bot.new({
     fighter_id = function() return fighter_id end,
     report = function(id, r) json.dump_file(DIR .. "bot\\" .. id .. ".json", r) end,
     log = function(m) flash(m) end,
+    trace = function(m) L("bot: %s", m) end,
 })
 Game.injector = function(t) return S.bot:frame_mask(t) end
 Game.observer = function(smp) S.bot:observe(smp) end
@@ -303,6 +321,7 @@ end
 
 local function handle_command(c)
     local cmd = c.cmd
+    L("command: %s%s", tostring(cmd), c.combo_id and (" " .. tostring(c.combo_id)) or (c.ids and (" (" .. #c.ids .. " combos)") or ""))
     if cmd == "load" then
         scan_combos()
         if c.mode then set_mode(c.mode) end

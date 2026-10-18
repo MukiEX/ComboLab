@@ -21,6 +21,7 @@ local SA_BY_FIGHTER = {
 }
 
 local CHARGE_FRAMES = 46
+local STRIDE = 3          -- coarse scan step (frames)
 
 local function button_mask(tok)
     local mask, i = 0, 1
@@ -109,6 +110,7 @@ end
 -- }
 function Bot.new(env)
     local self = setmetatable({}, Bot)
+    env.trace = env.trace or function() end
     self.env = env
     self.running = false
     self.state = "idle"
@@ -128,6 +130,7 @@ function Bot:start(ids, opts)
     self.started_clock = os.clock()
     self.total_attempts = 0
     self.msg = nil
+    self.env.trace(string.format("start: %d combo(s), reps %d, sweet %s", #ids, self.reps, tostring(self.sweet)))
     self:next_combo()
 end
 
@@ -139,6 +142,7 @@ function Bot:stop(reason)
     self.stop_reason = reason or "stopped"
     if self.cur then self:finish_combo(reason or "stopped") end
     self.env.log("Bot stopped: " .. tostring(self.stop_reason))
+    self.env.trace("stopped: " .. tostring(self.stop_reason))
 end
 
 function Bot:next_combo()
@@ -169,6 +173,7 @@ function Bot:next_combo()
             end
         end
         if skip then
+            self.env.trace(string.format("skip %s: %s", tostring(id), skip))
             self.results[#self.results + 1] = { id = id, name = combo and combo.name or id, ok = false, reason = "skipped: " .. skip }
         else
             if self.opts.reset ~= false then self.env.reset_profile() end
@@ -180,6 +185,7 @@ function Bot:next_combo()
                 spacing = tonumber(bot.spacing) or tonumber(self.opts.spacing) or 0,
                 mid = {}, win = {}, attempts = 0, t0 = os.clock(),
             }
+            self.env.trace(string.format("combo %s (%d steps, %s, spacing %s)", id, #combo.steps, self.cur.position, tostring(self.cur.spacing)))
             self:begin_phase("A", 2)
             return
         end
@@ -197,13 +203,17 @@ function Bot:begin_phase(phase, k)
     c.phase, c.k = phase, k
     if phase == "A" then
         if c.N < 2 then return self:begin_phase("C") end
-        c.sweep = { d = c.plans[k].lead + 1, res = {}, first_ok = nil, last_ok = nil, pass = 1, list = nil }
+        c.sweep = { d = c.plans[k].lead + 1, res = {}, mode = "scan" }
         c.d = c.sweep.d
     elseif phase == "B" then
         if not self.sweet or k > c.N - 1 then return self:begin_phase("C") end
         local w = c.win[k]
         c.blist = {}
-        for _ = 1, self.reps do for d = w.E, w.L do c.blist[#c.blist + 1] = d end end
+        local step = math.max(1, math.ceil((w.L - w.E + 1) / 8))       -- at most ~8 frames per step
+        for _ = 1, self.reps do
+            for d = w.E, w.L, step do c.blist[#c.blist + 1] = d end
+            if (w.L - w.E) % step ~= 0 then c.blist[#c.blist + 1] = w.L end
+        end
         c.bi = 1
         c.d = c.blist[1]
     elseif phase == "C" then
@@ -249,6 +259,25 @@ function Bot:on_result(res)
     self.attempt_time = os.clock()
     local steps = res and res.steps or {}
     local function ok_at(j) return steps[j] and steps[j].res == "ok" end
+    do
+        local k = c.k
+        local tested = (c.phase == "A") and k or nil
+        local sres = tested and steps[tested] and steps[tested].res or nil
+        self.last_probe = {
+            phase = c.phase, step = tested, label = tested and c.combo.steps[tested].label or nil, d = c.d,
+            ok = tested and ok_at(tested) or (res and res.ok) or false,
+            res = sres or (res and res.result), fail_step = res and res.fail_step,
+            fail_label = res and res.fail_step and c.combo.steps[res.fail_step] and c.combo.steps[res.fail_step].label,
+            t = os.clock(),
+        }
+    end
+    do
+        local parts = {}
+        for j = 1, c.N do parts[#parts + 1] = steps[j] and (steps[j].res .. (steps[j].p and ("@" .. steps[j].p) or "")) or "-" end
+        self.env.trace(string.format("#%d phase %s step %s d=%s anchors=%d -> %s [%s]", c.attempts, c.phase, tostring(c.k),
+            tostring(c.d), self.anchor and #self.anchor or 0, res and (res.ok and "clean" or ("fail@" .. tostring(res.fail_step))) or "no result",
+            table.concat(parts, " ")))
+    end
 
     if c.phase == "A" then
         local k = c.k
@@ -268,40 +297,75 @@ function Bot:on_result(res)
         local sw = c.sweep
         local r = sw.res[c.d] or { n = 0, ok = 0 }
         r.n = r.n + 1
-        if ok_at(k) then r.ok = r.ok + 1 end
+        local good = ok_at(k)
+        if good then r.ok = r.ok + 1 end
         sw.res[c.d] = r
-        if sw.pass == 1 then
-            if ok_at(k) then sw.first_ok = sw.first_ok or c.d; sw.last_ok = c.d end
-            local done = (sw.last_ok and c.d - sw.last_ok >= 4) or c.d >= self.dmax
-            if not done then
-                c.d = c.d + 1
+        local dmin = c.plans[k].lead + 1
+        local label = c.combo.steps[k].label
+        -- coarse-to-fine search: scan in strides, then bisect each edge
+        if sw.mode == "scan" then
+            if good then
+                sw.first_ok, sw.last_ok = c.d, c.d
+                if sw.last_fail then sw.mode, sw.lo, sw.hi = "lo", sw.last_fail, c.d
+                else sw.E = c.d; sw.mode = "hi_scan" end
+            else
+                sw.last_fail = c.d
+                c.d = c.d + STRIDE
+                if c.d > self.dmax then
+                    return self:fail_combo(string.format("no timing between %d and %d frames made step %d (%s) work",
+                        dmin, self.dmax, k, label))
+                end
                 return self:prep()
             end
-            if not sw.first_ok then
-                return self:fail_combo(string.format("no timing between %d and %d frames made step %d (%s) work",
-                    c.plans[k].lead + 1, self.dmax, k, c.combo.steps[k].label))
-            end
-            -- confirmation passes around the edges
-            local E, L = contiguous(sw.res, c.plans[k].lead + 1, self.dmax)
-            sw.list = {}
-            for _ = 2, self.reps do
-                for _, d in ipairs({ E - 1, E, L, L + 1 }) do
-                    if d >= c.plans[k].lead + 1 then sw.list[#sw.list + 1] = d end
+        elseif sw.mode == "lo" then
+            if good then sw.hi = c.d else sw.lo = c.d end
+        elseif sw.mode == "hi_scan" then
+            if good then sw.last_ok = c.d else sw.mode, sw.lo, sw.hi = "hi", sw.last_ok, c.d end
+        elseif sw.mode == "hi" then
+            if good then sw.lo = c.d else sw.hi = c.d end
+        end
+        -- choose the next probe
+        if sw.mode == "lo" then
+            if sw.hi - sw.lo > 1 then c.d = (sw.lo + sw.hi) // 2; return self:prep() end
+            sw.E = sw.hi
+            sw.mode = "hi_scan"
+        end
+        if sw.mode == "hi_scan" then
+            local nd = sw.last_ok + STRIDE
+            if nd <= self.dmax then c.d = nd; return self:prep() end
+            sw.L = self.dmax
+            sw.mode = "confirm"
+        end
+        if sw.mode == "hi" then
+            if sw.hi - sw.lo > 1 then c.d = (sw.lo + sw.hi) // 2; return self:prep() end
+            sw.L = sw.lo
+            sw.mode = "confirm"
+        end
+        if sw.mode == "confirm" then
+            if not sw.list then
+                sw.list, sw.li = {}, 0
+                for _ = 2, self.reps do
+                    for _, d in ipairs({ sw.E - 1, sw.E, sw.L, sw.L + 1 }) do
+                        if d >= dmin and d <= self.dmax then sw.list[#sw.list + 1] = d end
+                    end
                 end
             end
-            sw.pass, sw.li = 2, 0
+            sw.li = sw.li + 1
+            if sw.list[sw.li] then c.d = sw.list[sw.li]; return self:prep() end
         end
-        sw.li = (sw.li or 0) + 1
-        if sw.list[sw.li] then
-            c.d = sw.list[sw.li]
-            return self:prep()
-        end
-        local E, L = contiguous(sw.res, c.plans[k].lead + 1, self.dmax)
-        if not E then
-            return self:fail_combo(string.format("step %d (%s) only worked by luck; no reliable timing", k, c.combo.steps[k].label))
+        -- settle the edges with the confirmation results
+        local function rate(d) local x = sw.res[d]; return x and x.n > 0 and (x.ok / x.n) or nil end
+        local E, L = sw.E, sw.L
+        if rate(E - 1) and rate(E - 1) >= 0.5 then E = E - 1 end
+        if rate(E) and rate(E) < 0.5 and E < L then E = E + 1 end
+        if rate(L + 1) and rate(L + 1) >= 0.5 then L = L + 1 end
+        if rate(L) and rate(L) < 0.5 and L > E then L = L - 1 end
+        if not E or not L or L < E then
+            return self:fail_combo(string.format("step %d (%s) only worked by luck; no reliable timing", k, label))
         end
         c.win[k] = { E = E, L = L }
         c.mid[k] = (E + L) // 2
+        self.env.trace(string.format("step %d (%s) window %d..%d", k, label, E, L))
         if k < c.N then return self:begin_phase("A", k + 1) end
         -- refine targets with the profile's sweet spot later; go to B
         return self:begin_phase("B", 2)
@@ -325,6 +389,7 @@ end
 
 function Bot:fail_combo(why)
     local c = self.cur
+    self.env.trace("combo failed: " .. why)
     self.env.log("Bot: " .. (c.combo.name or c.id) .. ": " .. why)
     self:finish_combo(why)
     self:next_combo()
@@ -343,6 +408,7 @@ function Bot:finish_combo(why)
         windows = windows, clean = c.cok, clean_of = c.cn, position = c.position,
     }
     self.results[#self.results + 1] = r
+    self.env.trace(string.format("combo done %s ok=%s clean %s/%s attempts %d", c.id, tostring(r.ok), tostring(c.cok), tostring(c.cn), c.attempts))
     self.env.report(c.id, r)
     self.cur = nil
     if why == nil and self.running then self:next_combo() end
@@ -432,6 +498,8 @@ function Bot:observe(s)
         end
     end
     if self.wait_anchor and s.t - (self.press[self.wait_anchor] or s.t) > 90 then
+        self.env.trace(string.format("step %d's move never started (expected action %s, last action %s)", self.wait_anchor,
+            tostring(c.profile and c.profile:learned_id(self.wait_anchor)), tostring(s.u.act)))
         self.wait_anchor = nil
         self.state = "await"
         self.await_t = s.t
@@ -464,6 +532,7 @@ function Bot:update()
     elseif self.state == "await" or self.state == "run" then
         if now - (self.run_t or now) > 600 then
             -- the tracker never reported (e.g. step 1 whiffed before it counted)
+            self.env.trace(string.format("no tracker result after 600 frames (state %s, waiting for step %s anchor)", self.state, tostring(self.wait_anchor)))
             self:on_result({ ok = false, steps = {} })
         end
     end
@@ -480,7 +549,11 @@ function Bot:do_teleport()
     else
         ux, dx = -dist / 2, dist / 2
     end
-    self.env.teleport(ux, dx)
+    local ok = self.env.teleport(ux, dx)
+    if not ok and not self.warned_tp then
+        self.warned_tp = true
+        self.env.trace("teleport failed (POS_SETx not available?) - attempts will start from wherever the fighters are")
+    end
 end
 
 function Bot:status()
@@ -495,6 +568,7 @@ function Bot:status()
         st.combo_id, st.combo_name, st.phase, st.step, st.d = c.id, c.combo.name, c.phase, c.k, c.d
         st.step_label = c.k and c.combo.steps[c.k] and c.combo.steps[c.k].label
         st.combo_attempts = c.attempts
+        st.last_probe = self.last_probe
         st.N = c.N
         st.position = c.position
     end

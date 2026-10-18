@@ -528,6 +528,26 @@ function Overlay.draw(S)
             hint = o.hint
         end
     end
+    -- while the bot runs, describe the probe instead of the normal drop banner
+    local bp = S.bot_status and S.bot_status.last_probe
+    if bp and not live and (os.clock() - (bp.t or 0)) < 3 then
+        hint = nil
+        if bp.phase == "A" and bp.step then
+            if bp.ok then
+                res_s, res_col = string.format("step %d %s at +%df: works", bp.step, bp.label or "", bp.d or 0), C.green
+            else
+                res_s, res_col = string.format("step %d %s at +%df: %s", bp.step, bp.label or "", bp.d or 0,
+                    Overlay.RES_TEXT[bp.res or ""] or "no hit"), C.orange
+            end
+            hint = "the bot only presses up to the step it's testing; later steps dropping is expected"
+        elseif bp.ok then
+            res_s, res_col = "full combo: clean", C.green
+        else
+            res_s, res_col = string.format("full combo: dropped at %s", bp.fail_label or "?"), C.orange
+        end
+    elseif S.bot_status then
+        res_s = nil
+    end
     local res_f = combo and f_big or f_sm
     local pad = 12 * sc
     if N > 0 then panel(W / 2 - total / 2 - pad, ny - pad * 0.6, total + pad * 2, line_h + pad * 1.2) end

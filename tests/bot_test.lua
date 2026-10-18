@@ -18,9 +18,16 @@ json = {
     load_file = function(p) return deep(FILES[p]) end,
     dump_file = function(p, v) FILES[p] = deep(v); return true end,
 }
+LOGLINES = {}
+log = { info = function(m) LOGLINES[#LOGLINES + 1] = m end }
 fs = { glob = function(pat)
     local out = {}
-    for k in pairs(FILES) do if k:find("^ComboLab\\combos\\") then out[#out + 1] = k end end
+    local dir = pat:match("^ComboLab\\\\(%a+)\\\\")
+    local want = pat:match("\\\\([%w%-]+)\\%.json%$$")
+    for k in pairs(FILES) do
+        local kd, kn = k:match("^ComboLab\\(%a+)\\([%w%-]+)%.json$")
+        if kd == dir and (not want or want == kn) then out[#out + 1] = k end
+    end
     return out
 end }
 
