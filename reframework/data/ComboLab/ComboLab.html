@@ -225,6 +225,12 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
         <label class="f">Note flight <input type="range" id="optApproach" min="18" max="72" step="2" value="36"></label>
         <label class="f">Note colours <select id="optPalette"><option value="classic">Classic (red / white / blue)</option><option value="sf6">SF6 (blue / yellow / red)</option></select></label>
         <label class="switch"><input type="checkbox" id="optFlip"> Kicks from the left</label>
+      </div>
+      <div class="row" style="margin-top:12px;gap:22px;align-items:flex-end">
+        <label class="switch"><input type="checkbox" id="optSong"> Song mode <span class="muted">(count-in, fixed timeline)</span></label>
+        <label class="switch"><input type="checkbox" id="optFollow"> Follow my hits</label>
+        <label class="f">Song note flight <input type="range" id="optSongApproach" min="40" max="150" step="5" value="80"></label>
+        <label class="f">Count-in beat <input type="range" id="optSongBeat" min="15" max="60" step="1" value="30"></label>
         <span class="grow"></span>
         <button class="btn" id="btnOptions">Apply to game</button>
       </div>
@@ -387,7 +393,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.4.2";
+const PAGE_VERSION = "1.5.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -738,6 +744,7 @@ function optionsFromForm() {
     scale: +$("optScale").value, y: +$("optY").value,
     rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked,
     train_view: $("optView").value, note_approach: +$("optApproach").value, note_flip: $("optFlip").checked, note_palette: $("optPalette").value,
+    song_mode: $("optSong").checked, song_follow: $("optFollow").checked, song_approach: +$("optSongApproach").value, song_beat: +$("optSongBeat").value,
   };
 }
 
@@ -751,6 +758,9 @@ function optionsToForm(o) {
   if (o.note_approach) $("optApproach").value = o.note_approach;
   $("optFlip").checked = !!o.note_flip;
   if (o.note_palette) $("optPalette").value = o.note_palette;
+  $("optSong").checked = !!o.song_mode; $("optFollow").checked = !!o.song_follow;
+  if (o.song_approach) $("optSongApproach").value = o.song_approach;
+  if (o.song_beat) $("optSongBeat").value = o.song_beat;
   if (o.scale) $("optScale").value = o.scale;
   if (o.y) $("optY").value = o.y;
 }

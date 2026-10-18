@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.4.2"
+local VERSION = "1.5.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -32,7 +32,11 @@ local DEFAULTS = {
     train_view = "bar",       -- Train view: "bar" | "notes" (Spearmint Twintails) | "both"
     note_approach = 36,        -- note flight time in frames
     note_flip = false,
-    note_palette = "classic",  -- note colours: "classic" (red/white/blue) | "sf6" (blue/yellow/red)         -- true: kicks from the left, punches from the right
+    note_palette = "classic",
+    song_mode = false,         -- Train: count-in, then the whole combo on a fixed timeline
+    song_beat = 30,            -- count-in beat length in frames
+    song_approach = 80,        -- note flight time in song mode (frames)
+    song_follow = false,       -- re-time remaining notes from the hits that land  -- note colours: "classic" (red/white/blue) | "sf6" (blue/yellow/red)         -- true: kicks from the left, punches from the right
     rhythm = true,             -- Train: glowing playhead on the optimal timing
     rhythm_demo = true,        -- ...and a looping cadence preview between attempts
     ignore_spam_samples = true,
@@ -307,6 +311,10 @@ local function apply_options(o)
     end
     if o.train_view == "bar" or o.train_view == "notes" or o.train_view == "both" then cfg.train_view = o.train_view end
     if o.note_flip ~= nil then cfg.note_flip = o.note_flip == true end
+    if o.song_mode ~= nil then cfg.song_mode = o.song_mode == true; S.song = nil end
+    if o.song_follow ~= nil then cfg.song_follow = o.song_follow == true end
+    if tonumber(o.song_approach) then cfg.song_approach = math.max(30, math.min(180, math.floor(tonumber(o.song_approach)))) end
+    if tonumber(o.song_beat) then cfg.song_beat = math.max(12, math.min(90, math.floor(tonumber(o.song_beat)))) end
     if o.note_palette == "classic" or o.note_palette == "sf6" then cfg.note_palette = o.note_palette end
     if tonumber(o.note_approach) then cfg.note_approach = math.max(12, math.min(90, math.floor(tonumber(o.note_approach)))) end
     for _, k in ipairs({ "scale", "y", "result_seconds", "timeout" }) do
@@ -390,6 +398,7 @@ local function write_status()
             user_side = cfg.user_side, overlay = cfg.overlay, enabled = cfg.enabled,
             rhythm = cfg.rhythm, rhythm_demo = cfg.rhythm_demo,
             train_view = cfg.train_view, note_approach = cfg.note_approach, note_flip = cfg.note_flip, note_palette = cfg.note_palette,
+            song_mode = cfg.song_mode, song_follow = cfg.song_follow, song_approach = cfg.song_approach, song_beat = cfg.song_beat,
         },
         bot = S.bot:status(),
         error = last_error or Game.last_error,
@@ -532,6 +541,17 @@ re.on_draw_ui(function()
     if changed then cfg.note_approach = v; save_cfg() end
     changed, v = imgui.combo("Note colours", cfg.note_palette == "sf6" and 2 or 1, { "Classic (red / white / blue)", "SF6 (blue / yellow / red)" })
     if changed then cfg.note_palette = (v == 2) and "sf6" or "classic"; save_cfg() end
+    changed, v = imgui.checkbox("Song mode (count-in, fixed timeline)", cfg.song_mode == true)
+    if changed then cfg.song_mode = v; S.song = nil; save_cfg() end
+    imgui.same_line()
+    changed, v = imgui.checkbox("Follow my hits", cfg.song_follow == true)
+    if changed then cfg.song_follow = v; save_cfg() end
+    if imgui.slider_int then
+        changed, v = imgui.slider_int("Song note flight (frames)", cfg.song_approach or 80, 40, 150)
+        if changed then cfg.song_approach = v; save_cfg() end
+        changed, v = imgui.slider_int("Count-in beat (frames)", cfg.song_beat or 30, 15, 60)
+        if changed then cfg.song_beat = v; save_cfg() end
+    end
     changed, v = imgui.checkbox("Notes: kicks from the left, punches from the right", cfg.note_flip == true)
     if changed then cfg.note_flip = v; save_cfg() end
     changed, v = imgui.checkbox("Safe mode: no game hook (restart game to apply)", cfg.use_hook == false)

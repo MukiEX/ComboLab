@@ -121,7 +121,7 @@ end
 function Bot:start(ids, opts)
     self.opts = opts or {}
     self.reps = math.max(1, math.min(3, tonumber(self.opts.reps) or 2))
-    self.dmax = tonumber(self.opts.dmax) or 50
+    self.dmax = tonumber(self.opts.dmax) or 90
     self.sweet = self.opts.sweet ~= false
     self.queue = ids
     self.qi = 0
@@ -389,6 +389,10 @@ end
 
 function Bot:fail_combo(why)
     local c = self.cur
+    local nm = " " .. tostring(c.combo.name or "") .. " "
+    if nm:find("[%s:%(]CH[%s,)]") or nm:find("[%s:%(]PC[%s,)]") or nm:lower():find("counter") then
+        why = why .. " (this combo needs a counter hit: set the dummy's Counter setting)"
+    end
     self.env.trace("combo failed: " .. why)
     self.env.log("Bot: " .. (c.combo.name or c.id) .. ": " .. why)
     self:finish_combo(why)

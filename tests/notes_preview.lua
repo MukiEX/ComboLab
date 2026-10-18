@@ -41,19 +41,27 @@ end
 local ANCHOR = 100
 local tick = 96
 local live = { c = 2, anchor = ANCHOR, steps = { [1] = { res = "ok" } } }
+local SONG = os.getenv("SONG") == "1"
+if SONG then live = nil; S_result_age = 99 end
 local tracker = { live_detail = function() return live end, now = function() return tick end }
+local start_tick = 96
 local S = { mode = "train", combo = combo, profile = P, tracker = tracker, last = nil, result_age = 99,
     stats = { n = 7, ok = 5, streak = 3, best = 4 }, msg_age = 99, version = "1.4.0", attempt_seq = 1,
-    cfg = { scale = 1.0, y = 0.25, result_seconds = 4, train_view = "notes", note_approach = 36, note_palette = os.getenv("PAL") or "classic" } }
+    cfg = { scale = 1.0, y = 0.25, result_seconds = 4, train_view = os.getenv("VIEW") or "notes", note_approach = 36, note_palette = os.getenv("PAL") or "classic",
+        song_mode = os.getenv("SONG") == "1", song_approach = 80, song_beat = 30 } }
 -- simulate: the player hits each step on its target frame
 local function target(k) return P:window(k).mid end
 local hit = {}
 for f = 0, NF - 1 do
-    tick = 96 + f * 2
+    tick = start_tick + f * (SONG and 3 or 2)
     CLK = f * 2 / 60
     S.tick_clock = CLK
+    -- song mode: the player presses step 1 on the downbeat, which starts the attempt
+    if SONG and not live and S.song and tick >= S.song.T[1] then
+        live = { c = 2, anchor = S.song.T[1] + 1, steps = { [1] = { res = "ok" } } }
+    end
     -- advance live state when the current step's target passes
-    while live.c <= #labels and tick >= live.anchor + target(live.c) do
+    while live and live.c <= #labels and tick >= live.anchor + target(live.c) do
         local k = live.c
         live.steps[k] = { res = "ok", p = math.floor(target(k) + 0.5), off = 0 }
         live.anchor = live.anchor + math.floor(target(k) + 0.5) + 1

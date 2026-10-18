@@ -185,6 +185,25 @@ local demo_t0 = nil
 function Overlay.rhythm(S, geo, live, by, bh, sc)
     local P = S.profile
     if not P then return end
+    if S.song and not (S.cfg.song_follow and live) then
+        demo_t0 = nil
+        local now = S.tracker:now()
+        if not now then return end
+        local fnow = now + math.max(0, math.min(1, (os.clock() - (S.tick_clock or os.clock())) * 60))
+        local N = #S.combo.steps
+        local T = S.song.T
+        for k = N, 2, -1 do
+            local w = P:window(k)
+            local anchor = T[k] - w.mid
+            if fnow >= anchor + geo[k].lo then
+                if fnow <= T[k] + (w.L - w.mid) + 8 then
+                    draw_playhead(fnow - anchor, geo[k].lo, geo[k].hi, geo[k].fx, geo[k].cell, by, bh, sc, w, false)
+                end
+                break
+            end
+        end
+        return
+    end
     if live then
         demo_t0 = nil
         local k = live.c
@@ -195,7 +214,7 @@ function Overlay.rhythm(S, geo, live, by, bh, sc)
         end
         return
     end
-    if S.cfg.rhythm_demo == false then return end
+    if S.cfg.rhythm_demo == false or S.cfg.song_mode then return end
     -- build the demo timeline (frames from the combo's first move)
     local N = #S.combo.steps
     local anchors, A, have = {}, 0, 0
@@ -223,6 +242,62 @@ function Overlay.rhythm(S, geo, live, by, bh, sc)
     end
 end
 
+
+-- --------------------------------------------------------------------------
+-- Song mode (Train): instead of waiting for the first hit, a count-in plays
+-- and the whole combo is laid out on a fixed timeline at its ideal cadence
+-- (each step's target frame + typical startup), notes visible from further out.
+-- "Follow my hits" re-times the remaining notes from the moves that came out.
+-- --------------------------------------------------------------------------
+function Overlay.song_update(S, live, now)
+    local cfg = S.cfg
+    if not (S.mode == "train" and cfg.song_mode and S.combo and S.profile) or not now then
+        S.song, S.song_hint = nil, nil
+        return
+    end
+    local P, steps = S.profile, S.combo.steps
+    local N = #steps
+    for k = 2, N do
+        if not P:window(k) then
+            S.song = nil
+            S.song_hint = string.format("song mode needs every step timed (%d/%d) - run the bot or Develop", k - 2, N - 1)
+            return
+        end
+    end
+    S.song_hint = nil
+    local song = S.song
+    -- finish: after the last note and once the attempt is over, re-arm when idle
+    if song and not live and now > song.T[N] + 30 and (S.result_age or 99) > 1.0 then song = nil end
+    if song and not live and now > song.T[N] + 240 then song = nil end
+    if not song then
+        if live or (S.result_age or 99) < 1.0 then S.song = nil return end
+        local B = math.max(12, cfg.song_beat or 30)
+        song = { t0 = now, B = B, T = {} }
+        song.T[1] = now + 4 * B
+        local prev_dq = 1
+        for k = 2, N do
+            local w = P:window(k)
+            song.T[k] = song.T[k - 1] + prev_dq + w.mid
+            prev_dq = w.dq or 1
+        end
+        song.fixed = {}
+        for k = 1, N do song.fixed[k] = song.T[k] end
+    end
+    -- follow my hits: re-time the notes still ahead from the real anchor
+    if cfg.song_follow and live and live.anchor and live.c and live.c >= 2 and live.c <= N and not live.failed then
+        local w = P:window(live.c)
+        song.T[live.c] = live.anchor + w.mid
+        for j = live.c + 1, N do
+            local wj, wp = P:window(j), P:window(j - 1)
+            song.T[j] = song.T[j - 1] + (wp.dq or 1) + wj.mid
+        end
+    end
+    -- count-in text: 3, 2, 1 on the beats before step 1
+    local beat = math.floor((now - song.t0) / song.B)
+    song.count = (beat >= 1 and beat <= 3) and tostring(4 - beat) or nil
+    song.beat_phase = ((now - song.t0) % song.B) / song.B
+    S.song = song
+end
 
 -- --------------------------------------------------------------------------
 -- "Spearmint Twintails" note view (Train): each upcoming step is a note that
@@ -329,8 +404,17 @@ function Overlay.notes(S, W, H, sc, top)
 
     -- hit times
     local T = {}
+    local first = 2
     local c = live and live.c or nil
-    if live and not live.failed and not live.success and c and c >= 2 and c <= N and live.anchor then
+    if S.song then
+        A = cfg.song_approach or 80
+        first = 1
+        for j = 1, N do
+            local done = live and live.steps and live.steps[j] and live.steps[j].res
+            if not done or (j >= (c or 1)) then T[j] = S.song.T[j] end
+        end
+        if live and c then for j = 1, c - 1 do T[j] = nil end end
+    elseif live and not live.failed and not live.success and c and c >= 2 and c <= N and live.anchor then
         local w = P:window(c)
         if w then
             T[c] = live.anchor + w.mid
@@ -344,15 +428,21 @@ function Overlay.notes(S, W, H, sc, top)
 
     -- target ring
     local nxt = nil
-    for j = 2, N do if T[j] then nxt = j break end end
+    for j = first, N do if T[j] and T[j] > fnow - 6 then nxt = j break end end
     draw.filled_circle(cx, cy, R + 7 * sc, rgba(0, 0, 0, 150), 48)
     draw.outline_circle(cx, cy, R, rgba(255, 255, 255, 120), 48)
     if nxt then
-        local w = P:window(nxt)
+        local w = nxt >= 2 and P:window(nxt) or nil
         local per = (2 * math.pi) / A                   -- radians per frame
         -- window arc and sweet arc, positioned relative to the target frame (12 o'clock)
-        ring_dots(cx, cy, R, (w.E - w.mid) * per, (w.L - w.mid) * per, with_alpha(C.cyan, 0.85), 3.2 * sc)
-        if w.sweet_lo then ring_dots(cx, cy, R, (w.sweet_lo - w.mid) * per, (w.sweet_hi - w.mid) * per, C.white, 3.8 * sc) end
+        if w then
+            ring_dots(cx, cy, R, (w.E - w.mid) * per, (w.L - w.mid) * per, with_alpha(C.cyan, 0.85), 3.2 * sc)
+            if w.sweet_lo then ring_dots(cx, cy, R, (w.sweet_lo - w.mid) * per, (w.sweet_hi - w.mid) * per, C.white, 3.8 * sc) end
+        end
+        if S.song and S.song.count then
+            local pulse = 1 - (S.song.beat_phase or 0)
+            draw.outline_circle(cx, cy, R + (4 + 10 * pulse) * sc, with_alpha(C.yellow, 0.3 + 0.6 * pulse), 48)
+        end
         -- countdown hand: a full turn over the approach, upright on the target frame
         local left = T[nxt] - fnow
         local a = -left * per
@@ -360,7 +450,7 @@ function Overlay.notes(S, W, H, sc, top)
         draw.line(cx, cy, hx, hy, rgba(255, 255, 255, 235), 3 * sc)
         draw.filled_circle(hx, hy, 4.5 * sc, rgba(255, 255, 255, 255), 12)
         labels[#labels + 1] = { x = cx, y = cy, text = steps[nxt].label, col = note_color(steps[nxt].label), big = true }
-    elseif not live then
+    elseif not live and not S.song then
         -- idle: breathing ring on the first step
         local pulse = 0.5 + 0.5 * math.sin(clock * 4)
         draw.outline_circle(cx, cy, R + (3 + 4 * pulse) * sc, with_alpha(note_color(steps[1].label), 0.4 + 0.5 * pulse), 48)
@@ -370,7 +460,7 @@ function Overlay.notes(S, W, H, sc, top)
 
     -- notes in flight
     local dist = math.min(W * 0.34, 640 * sc)
-    for j = N, 2, -1 do
+    for j = N, first, -1 do
         local Tj = T[j]
         if Tj then
             local u = 1 - (Tj - fnow) / A
@@ -409,6 +499,10 @@ function Overlay.notes(S, W, H, sc, top)
         end
     end
 
+    if S.song and S.song.count then
+        labels[#labels + 1] = { x = cx - R - 46 * sc, y = cy, text = S.song.count, col = C.yellow, judge = true }
+    end
+
     -- judgement burst
     local jl = judge_log._last
     if jl then
@@ -441,6 +535,7 @@ function Overlay.draw(S)
     local N = #steps
     local live = S.tracker and S.tracker:live_detail() or nil
     local shown = live or S.last
+    Overlay.song_update(S, live, S.tracker and S.tracker:now())
 
     -- ------------------------------------------------ bars (draw layer)
     local bw = math.min(W * 0.56, 1150 * sc)
@@ -589,6 +684,14 @@ function Overlay.draw(S)
             text_at(bx + bw - tw, by - 26 * sc, nm, C.dim, f_sm)
         end
 
+        if S.song and S.song.count and not notes_on then
+            local tw = measure(S.song.count, f_big)
+            text_at(W / 2 - tw / 2, by - 64 * sc, S.song.count, C.yellow, f_big)
+        end
+        if S.song_hint and not live then
+            local tw = measure(S.song_hint, f_sm)
+            text_at(W / 2 - tw / 2, by - 48 * sc, S.song_hint, C.yellow, f_sm)
+        end
         if S._rhythm_hint and not live then
             local tw = measure(S._rhythm_hint, f_sm)
             text_at(W / 2 - tw / 2, by - 26 * sc, S._rhythm_hint, C.yellow, f_sm)
