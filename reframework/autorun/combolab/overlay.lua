@@ -151,27 +151,35 @@ end
 
 -- Glowing playhead at frame `f` of a segment. Brightest when it crosses the
 -- optimal (mid-window) frame; pulses gently while travelling.
-local function draw_playhead(f, lo, hi, fx, cell, y, h, sc, win, demo)
-    if f < lo or f > hi + 1 then return end
-    local x = fx(f) + cell * 0.5
+-- glowing line at screen x; `near` (0..1) brightens it, `big` scales it up
+local function draw_playhead_x(x, y, h, sc, near, demo, big)
     local t = os.clock()
     local pulse = 0.65 + 0.35 * math.sin(t * math.pi * 4)
+    local a = (demo and 0.55 or 1.0)
+    local g = big or 1
+    local glow_a = math.floor(255 * a * math.min(1, (0.25 + 0.35 * pulse + 0.4 * near) * (big and 1.25 or 1)))
+    -- glow halo (widest, faintest first)
+    local rings = big and 6 or 4
+    for i = rings, 1, -1 do
+        local ww = (2 + i * 3.5 * (1 + near)) * sc * g
+        local al = math.floor(glow_a / (i + 0.5))
+        draw.filled_rect(x - ww / 2, y - (3 + i) * sc * g, ww, h + (6 + 2 * i) * sc * g, rgba(120, 240, 255, al))
+    end
+    local core = near > 0.5 and rgba(255, 255, 255, math.floor(255 * a)) or rgba(170, 250, 255, math.floor(230 * a))
+    local cw = 3 * sc * g
+    draw.filled_rect(x - cw / 2, y - 4 * sc * g, cw, h + 8 * sc * g, core)
+end
+
+local function draw_playhead(f, lo, hi, fx, cell, y, h, sc, win, demo, big)
+    if f < lo or f > hi + 1 then return end
+    local x = fx(f) + cell * 0.5
     local near = 0
     if win and win.mid then
         local d = math.abs(f - win.mid)
         near = math.max(0, 1 - d / 1.5)          -- flash on the optimal frame
         if f >= win.E and f <= win.L + 1 then near = math.max(near, 0.35) end
     end
-    local a = (demo and 0.55 or 1.0)
-    local glow_a = math.floor(255 * a * (0.25 + 0.35 * pulse + 0.4 * near))
-    -- glow halo (widest, faintest first)
-    for i = 4, 1, -1 do
-        local ww = (2 + i * 3.5 * (1 + near)) * sc
-        local al = math.floor(glow_a / (i + 0.5))
-        draw.filled_rect(x - ww / 2, y - (3 + i) * sc, ww, h + (6 + 2 * i) * sc, rgba(120, 240, 255, al))
-    end
-    local core = near > 0.5 and rgba(255, 255, 255, math.floor(255 * a)) or rgba(170, 250, 255, math.floor(230 * a))
-    draw.filled_rect(x - 1.5 * sc, y - 4 * sc, 3 * sc, h + 8 * sc, core)
+    draw_playhead_x(x, y, h, sc, near, demo, big)
 end
 
 -- --------------------------------------------------------------------------
@@ -192,12 +200,25 @@ function Overlay.rhythm(S, geo, live, by, bh, sc)
         local fnow = now + math.max(0, math.min(1, (os.clock() - (S.tick_clock or os.clock())) * 60))
         local N = #S.combo.steps
         local T = S.song.T
+        local BIG = 1.6
+        local lead = geo.lead
+        if lead and fnow < T[1] then
+            -- count-in: travel across the lead-in and reach step 1 on the downbeat
+            local u = (fnow - S.song.t0) / math.max(1, T[1] - S.song.t0)
+            local beat_near = math.max(0, 1 - ((S.song.beat_phase or 0) * 4))
+            draw_playhead_x(lead.x + u * (lead.mx - lead.x), by, bh, sc, beat_near * 0.6, false, BIG)
+            return
+        end
+        if lead and fnow < T[1] + 8 then
+            draw_playhead_x(lead.mx, by, bh, sc, math.max(0, 1 - (fnow - T[1]) / 8), false, BIG)
+            return
+        end
         for k = N, 2, -1 do
             local w = P:window(k)
             local anchor = T[k] - w.mid
             if fnow >= anchor + geo[k].lo then
                 if fnow <= T[k] + (w.L - w.mid) + 8 then
-                    draw_playhead(fnow - anchor, geo[k].lo, geo[k].hi, geo[k].fx, geo[k].cell, by, bh, sc, w, false)
+                    draw_playhead(fnow - anchor, geo[k].lo, geo[k].hi, geo[k].fx, geo[k].cell, by, bh, sc, w, false, BIG)
                 end
                 break
             end
@@ -556,14 +577,27 @@ function Overlay.draw(S)
     if N >= 2 and bar_on then
         local gap = 6 * sc
         local first_w = 18 * sc
-        local sw = (bw - first_w - gap * (N - 1)) / (N - 1)
+        local lead_w = (S.song and S.mode == "train") and math.floor(bw * 0.14) or 0
+        local sw = (bw - lead_w - (lead_w > 0 and gap or 0) - first_w - gap * (N - 1)) / (N - 1)
+        local geo = {}
+        local x0 = bx
+        if lead_w > 0 then
+            -- count-in lead: four beats ending at step 1
+            draw.filled_rect(bx, by, lead_w, bh, C.bg)
+            for b = 1, 3 do
+                local tx = bx + lead_w * b / 4
+                local lit = S.song.count and tonumber(S.song.count) and (4 - tonumber(S.song.count)) >= b
+                draw.filled_rect(tx - 1.5 * sc, by + bh * 0.2, 3 * sc, bh * 0.6, lit and C.yellow or rgba(255, 255, 255, 90))
+            end
+            x0 = bx + lead_w + gap
+            geo.lead = { x = bx, w = lead_w, mx = x0 + first_w / 2 }
+        end
         -- step 1 marker
         local s1 = shown and shown.steps and shown.steps[1]
         local c1 = C.bg_hi
         if s1 then c1 = RES_COLOR[s1.res] or C.white end
-        draw.filled_rect(bx, by, first_w, bh, c1)
-        local x = bx + first_w + gap
-        local geo = {}
+        draw.filled_rect(x0, by, first_w, bh, c1)
+        local x = x0 + first_w + gap
         for k = 2, N do
             local press = shown and shown.steps and shown.steps[k] or nil
             local lo, hi, fx, cell = draw_segment(x, by, sw, bh, k, S, press, sc)
