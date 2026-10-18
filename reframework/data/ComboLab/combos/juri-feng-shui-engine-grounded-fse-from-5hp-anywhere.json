@@ -1,0 +1,85 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-feng-shui-engine-grounded-fse-from-5hp-anywhere",
+ "name": "Feng Shui Engine (grounded): FSE from 5HP, anywhere",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "5HP > 214214P, 6MP > 5HK > 5HP > 236HK, 623HP",
+ "version": 1,
+ "hash": "c1c17b28",
+ "steps": [
+  {
+   "label": "5HP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214214P",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 112,
+    "mode": "any"
+   }
+  },
+  {
+   "label": "6MP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "623HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

@@ -1,0 +1,85 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-feng-shui-engine-grounded-in-fse-dp-punish-pc",
+ "name": "Feng Shui Engine (grounded): In FSE: DP punish (PC)",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "5MP, 5HP > 236MK, 6MP > 2HP > 5HK > 214HK",
+ "version": 1,
+ "hash": "efe35e1e",
+ "steps": [
+  {
+   "label": "5MP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236MK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "6MP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

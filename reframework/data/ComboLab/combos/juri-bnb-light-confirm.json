@@ -1,0 +1,55 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-bnb-light-confirm",
+ "name": "BnB: Light confirm",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "2LK~2LP~2LP > 214MK",
+ "version": 1,
+ "hash": "3c9a997f",
+ "steps": [
+  {
+   "label": "2LK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214MK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

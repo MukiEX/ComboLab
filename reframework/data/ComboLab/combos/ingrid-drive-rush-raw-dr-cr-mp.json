@@ -1,0 +1,55 @@
+{
+ "format": "combolab.combo/1",
+ "id": "ingrid-drive-rush-raw-dr-cr-mp",
+ "name": "Drive Rush: Raw DR cr.MP",
+ "fighter_id": 32,
+ "fighter": "Ingrid",
+ "control": "classic",
+ "notation": "DR > 2MP, 2MK > 236MK",
+ "version": 1,
+ "hash": "188132a8",
+ "steps": [
+  {
+   "label": "DR",
+   "sep": "start",
+   "kind": "move",
+   "trigger": {
+    "type": "button",
+    "mask": 288,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2MP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2MK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236MK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "VesperArcade, Street Fighter 6 Ingrid Combo Guide (youtube.com/watch?v=1o4EPXASNwg)"
+}

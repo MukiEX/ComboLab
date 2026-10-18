@@ -1,0 +1,35 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-links-and-chains-mp-link",
+ "name": "Links and chains: MP link",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "5MP, 2MP",
+ "version": 1,
+ "hash": "7c1a3a04",
+ "steps": [
+  {
+   "label": "5MP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2MP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

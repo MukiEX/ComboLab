@@ -1,0 +1,55 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-bnb-jump-in-623hp-ender",
+ "name": "BnB: Jump-in, 623HP ender",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "j.HK, 5HP > 214HK, 623HP",
+ "version": 1,
+ "hash": "2ac945a0",
+ "steps": [
+  {
+   "label": "j.HK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "623HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

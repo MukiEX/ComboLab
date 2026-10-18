@@ -1,0 +1,55 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-punish-counter-pc-2mp",
+ "name": "Punish counter: PC 2MP",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "2MP, 5HP > 214HP, 236LK",
+ "version": 1,
+ "hash": "a62a9696",
+ "steps": [
+  {
+   "label": "2MP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236LK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

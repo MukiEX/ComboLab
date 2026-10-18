@@ -1,0 +1,95 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-lights-no-flame-lights-drc",
+ "name": "Lights (no flame): Lights DRC",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "2LK~2LP~2LP > DR > 5LP, 5HP > 214HP, 236LK",
+ "version": 1,
+ "hash": "ca95b958",
+ "steps": [
+  {
+   "label": "2LK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "DR",
+   "sep": ">",
+   "kind": "move",
+   "trigger": {
+    "type": "button",
+    "mask": 288,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236LK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

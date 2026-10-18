@@ -1,0 +1,65 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-feng-shui-engine-grounded-in-fse-short-bnb",
+ "name": "Feng Shui Engine (grounded): In FSE: short BnB",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "5MP, 2MP > 2MK > 5HP > 214MK",
+ "version": 1,
+ "hash": "7d2987e7",
+ "steps": [
+  {
+   "label": "5MP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2MP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2MK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214MK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

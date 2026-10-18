@@ -1,0 +1,45 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-mediums-and-heavies-2hp-link-into-lights",
+ "name": "Mediums and heavies: 2HP link into lights",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "2HP, 5LP > 214MP",
+ "version": 1,
+ "hash": "3eb3e467",
+ "steps": [
+  {
+   "label": "2HP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214MP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

@@ -1,0 +1,75 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-drive-impact-di-double-dash",
+ "name": "Drive Impact: DI double dash",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "DI, 66, 66, 5HP > 214PP, 236HK",
+ "version": 1,
+ "hash": "58cfc677",
+ "steps": [
+  {
+   "label": "DI",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 576,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "66",
+   "sep": ",",
+   "kind": "move",
+   "trigger": {
+    "type": "dash",
+    "mask": 0,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "66",
+   "sep": ",",
+   "kind": "move",
+   "trigger": {
+    "type": "dash",
+    "mask": 0,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214PP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 112,
+    "mode": "any"
+   }
+  },
+  {
+   "label": "236HK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

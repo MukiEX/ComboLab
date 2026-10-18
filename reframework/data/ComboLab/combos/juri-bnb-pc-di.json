@@ -1,0 +1,55 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-bnb-pc-di",
+ "name": "BnB: PC DI",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "DI, 5HP > 214HK, 623HP",
+ "version": 1,
+ "hash": "e563b4a8",
+ "steps": [
+  {
+   "label": "DI",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 576,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "623HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

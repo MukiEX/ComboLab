@@ -1,0 +1,65 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-drive-impact-pc-di-stock-negative-1-stock",
+ "name": "Drive Impact (PC): DI stock negative (1 stock)",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "DI, 6HP > 236MK, 6MP > 623HP",
+ "version": 1,
+ "hash": "873f69ea",
+ "steps": [
+  {
+   "label": "DI",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 576,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "6HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236MK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "6MP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "623HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

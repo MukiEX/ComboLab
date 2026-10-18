@@ -1,0 +1,35 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-links-and-chains-mp-into-lk",
+ "name": "Links and chains: MP into LK",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "2MP, 5LK",
+ "version": 1,
+ "hash": "f41a2684",
+ "steps": [
+  {
+   "label": "2MP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

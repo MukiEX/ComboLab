@@ -1,0 +1,65 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-feng-shui-engine-grounded-in-fse-sa1-route",
+ "name": "Feng Shui Engine (grounded): In FSE: SA1 route",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "6MP > 5HK > 5HP > 236HK, 236236K",
+ "version": 1,
+ "hash": "fcb47326",
+ "steps": [
+  {
+   "label": "6MP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236236K",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 896,
+    "mode": "any"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

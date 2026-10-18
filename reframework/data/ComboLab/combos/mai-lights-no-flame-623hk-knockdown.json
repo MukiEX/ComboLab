@@ -1,0 +1,55 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-lights-no-flame-623hk-knockdown",
+ "name": "Lights (no flame): 623HK knockdown",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "2LK~2LP~2LP > 623HK",
+ "version": 1,
+ "hash": "a8442e5d",
+ "steps": [
+  {
+   "label": "2LK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "623HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

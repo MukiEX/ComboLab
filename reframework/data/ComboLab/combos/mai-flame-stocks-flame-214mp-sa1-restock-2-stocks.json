@@ -1,0 +1,65 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-flame-stocks-flame-214mp-sa1-restock-2-stocks",
+ "name": "Flame stocks: Flame 214MP, SA1 restock (2 stocks)",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "2LK~2LP~5LP > 214MP, SA1",
+ "version": 1,
+ "hash": "42afa755",
+ "steps": [
+  {
+   "label": "2LK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214MP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "SA1",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 1008,
+    "mode": "any"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

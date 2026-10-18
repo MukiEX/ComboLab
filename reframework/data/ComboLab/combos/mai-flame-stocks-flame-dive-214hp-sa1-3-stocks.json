@@ -1,0 +1,75 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-flame-stocks-flame-dive-214hp-sa1-3-stocks",
+ "name": "Flame stocks: Flame dive, 214HP, SA1 (3 stocks)",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "5LK~5LK~5LK > j.214PP, 214HP, SA1",
+ "version": 1,
+ "hash": "7ec3231e",
+ "steps": [
+  {
+   "label": "5LK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LK",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LK",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "j.214PP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 112,
+    "mode": "any"
+   }
+  },
+  {
+   "label": "214HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "SA1",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 1008,
+    "mode": "any"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

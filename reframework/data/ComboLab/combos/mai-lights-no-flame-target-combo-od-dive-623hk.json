@@ -1,0 +1,65 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-lights-no-flame-target-combo-od-dive-623hk",
+ "name": "Lights (no flame): Target combo OD dive, 623HK",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "5LK~5LK~5LK > j.214PP, 623HK",
+ "version": 1,
+ "hash": "9eca3917",
+ "steps": [
+  {
+   "label": "5LK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LK",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LK",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "j.214PP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 112,
+    "mode": "any"
+   }
+  },
+  {
+   "label": "623HK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

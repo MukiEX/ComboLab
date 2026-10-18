@@ -1,0 +1,124 @@
+{
+ "format": "combolab.combo/1",
+ "id": "guile-dr-bnb-example",
+ "name": "DR BnB (example)",
+ "fighter_id": 18,
+ "fighter": "Guile",
+ "control": "classic",
+ "notation": "2LP > 2LP, 5LK > DR > 5LP, 5HP > DR > 5HK, 5MP~4HP > [2]8HK",
+ "version": 1,
+ "hash": "c93abf5c",
+ "steps": [
+  {
+   "label": "2LP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "DR",
+   "sep": ">",
+   "kind": "move",
+   "trigger": {
+    "type": "button",
+    "mask": 288,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5LP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "DR",
+   "sep": ">",
+   "kind": "move",
+   "trigger": {
+    "type": "button",
+    "mask": 288,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5MP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "4HP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "[2]8HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {}
+}

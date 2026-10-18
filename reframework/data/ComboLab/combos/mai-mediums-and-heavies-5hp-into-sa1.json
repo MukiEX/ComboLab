@@ -1,0 +1,35 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-mediums-and-heavies-5hp-into-sa1",
+ "name": "Mediums and heavies: 5HP into SA1",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "5HP > SA1",
+ "version": 1,
+ "hash": "45f66683",
+ "steps": [
+  {
+   "label": "5HP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "SA1",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 1008,
+    "mode": "any"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

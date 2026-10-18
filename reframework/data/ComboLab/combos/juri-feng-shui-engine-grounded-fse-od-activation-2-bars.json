@@ -1,0 +1,45 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-feng-shui-engine-grounded-fse-od-activation-2-bars",
+ "name": "Feng Shui Engine (grounded): FSE OD activation (2 bars)",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "236MKHK > 214214P, 236HK",
+ "version": 1,
+ "hash": "ebee18b6",
+ "steps": [
+  {
+   "label": "236MKHK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 768,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214214P",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 112,
+    "mode": "any"
+   }
+  },
+  {
+   "label": "236HK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

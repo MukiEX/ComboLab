@@ -1,0 +1,65 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-bnb-pc-5hk-whiff-punish",
+ "name": "BnB: PC 5HK whiff punish",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "5HK, DR > 5HP > 214HP, 236LK",
+ "version": 1,
+ "hash": "3ad34471",
+ "steps": [
+  {
+   "label": "5HK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "DR",
+   "sep": ",",
+   "kind": "move",
+   "trigger": {
+    "type": "button",
+    "mask": 288,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236LK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComboLab</title>
+<style>
+:root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321; --surface-3: #2c2c2a;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+  --ring: rgba(255,255,255,0.10);
+  --accent: #3987e5; --accent-ink: #0d0d0d;
+  --firm: #3987e5; --soft: #184f95; --sweet: #e8f2ff;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --c-early: #3987e5; --c-late: #d95926; --c-wrong: #199e70; --c-missed: #c98500; --c-spam: #d55181; --c-other: #9085e9;
+  --hit: #3987e5; --move: #c98500;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root:where(:not([data-theme="dark"])) {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f2f1ed; --surface-3: #e8e7e1;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781; --grid: #e1e0d9; --axis: #c3c2b7;
+    --ring: rgba(11,11,11,0.10); --accent: #2a78d6; --accent-ink: #ffffff;
+    --firm: #2a78d6; --soft: #9ec5f4; --sweet: #0d366b;
+    --c-early: #2a78d6; --c-late: #eb6834; --c-wrong: #1baf7a; --c-missed: #eda100; --c-spam: #e87ba4; --c-other: #6250d6;
+    --hit: #2a78d6; --move: #eda100;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f2f1ed; --surface-3: #e8e7e1;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781; --grid: #e1e0d9; --axis: #c3c2b7;
+  --ring: rgba(11,11,11,0.10); --accent: #2a78d6; --accent-ink: #ffffff;
+  --firm: #2a78d6; --soft: #9ec5f4; --sweet: #0d366b;
+  --c-early: #2a78d6; --c-late: #eb6834; --c-wrong: #1baf7a; --c-missed: #eda100; --c-spam: #e87ba4; --c-other: #6250d6;
+  --hit: #2a78d6; --move: #eda100;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 var(--sans); }
+button, input, select, textarea { font: inherit; color: inherit; }
+header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--ring); position: sticky; top: 0; background: var(--page); z-index: 5; flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
+header h1 span { color: var(--muted); font-weight: 400; }
+.pills { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: 12.5px; border: 1px solid var(--ring); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.on { background: var(--good); } .dot.warn { background: var(--warning); } .dot.off { background: var(--critical); }
+main { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 20px; padding: 20px; max-width: 1500px; margin: 0 auto; }
+@media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); padding: 16px; } }
+main > * { min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 16px; }
+.card + .card { margin-top: 16px; }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1 1 auto; min-width: 0; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); }
+input[type=text], select, textarea { background: var(--surface-2); border: 1px solid var(--ring); border-radius: 7px; padding: 7px 10px; outline: none; }
+input[type=text]:focus, select:focus, textarea:focus { border-color: var(--accent); }
+textarea.notation { width: 100%; font: 20px/1.4 var(--mono); padding: 12px 14px; resize: vertical; min-height: 64px; letter-spacing: .02em; }
+.btn { background: var(--surface-3); border: 1px solid var(--ring); border-radius: 7px; padding: 7px 13px; cursor: pointer; white-space: nowrap; }
+.btn:hover { filter: brightness(1.15); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+.btn.danger { color: var(--critical); }
+.btn.small { padding: 4px 9px; font-size: 12.5px; }
+.btn:disabled { opacity: .45; cursor: default; filter: none; }
+.muted { color: var(--muted); } .ink2 { color: var(--ink-2); }
+.lib-group { margin-bottom: 12px; }
+details.lib-sec > summary { cursor: pointer; font-size: 12px; color: var(--ink-2); padding: 4px 2px; list-style: none; }
+details.lib-sec > summary::before { content: "▸ "; color: var(--muted); }
+details.lib-sec[open] > summary::before { content: "▾ "; }
+details.lib-sec > summary span { color: var(--muted); font-weight: 400; }
+.lib-group h3 { font-size: 12px; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+.lib-item { display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 7px; border: 1px solid transparent; background: none; cursor: pointer; }
+.lib-item:hover { background: var(--surface-2); }
+.lib-item.sel { background: var(--surface-2); border-color: var(--accent); }
+.lib-item small { display: block; color: var(--muted); font: 11.5px/1.3 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.chip { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 10px 6px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--ring); cursor: pointer; font: 15px var(--mono); }
+.chip .k { font: 10.5px var(--sans); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.chip .kind { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+.chip.err { border-color: var(--critical); }
+.chip.sel { border-color: var(--accent); }
+.sep { font: 15px var(--mono); color: var(--muted); padding: 0 1px; }
+.override { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--ring); }
+.error { color: var(--critical); font-size: 12.5px; }
+.tabs { display: flex; overflow-x: auto; gap: 4px; border-bottom: 1px solid var(--ring); margin: -4px -16px 14px; padding: 0 12px; }
+.tab { background: none; border: none; padding: 9px 12px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; }
+.tab.on { color: var(--ink); border-bottom-color: var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.tile { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.tile .v { font-size: 22px; font-weight: 600; }
+.tile .l { font-size: 12px; color: var(--muted); }
+table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.t th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+table.t td { padding: 6px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+table.t td.m { font-family: var(--mono); }
+.chart { width: 100%; overflow-x: auto; }
+.chart svg { display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--ink-2); margin: 6px 0 10px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -2px; }
+.tip { position: fixed; pointer-events: none; background: var(--surface-3); border: 1px solid var(--ring); border-radius: 7px; padding: 7px 10px; font-size: 12.5px; z-index: 50; box-shadow: 0 6px 18px rgba(0,0,0,.35); display: none; max-width: 280px; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+.switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--ring); border-radius: 8px; padding: 2px; }
+.seg button { border: none; background: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: var(--ink-2); }
+.seg button.on { background: var(--surface-3); color: var(--ink); font-weight: 600; }
+.attempt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--grid); font-size: 13px; }
+.attempt .badge { width: 62px; font-weight: 600; font-size: 12px; }
+.stepres { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+.stepres span { font: 12px var(--mono); padding: 2px 6px; border-radius: 4px; background: var(--surface-2); }
+.stepres span.bad { outline: 1.5px solid var(--critical); }
+.stepres span.ok { color: var(--ink-2); }
+.notice { padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
+.notice b { color: var(--ink); }
+.botbar { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 8px 0; }
+.botbar i { display: block; height: 100%; background: var(--accent); }
+.botres { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--grid); font-size: 13px; align-items: baseline; flex-wrap: wrap; }
+.botres b { min-width: 16px; }
+.hidden { display: none !important; }
+kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background: var(--surface-3); border: 1px solid var(--ring); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ComboLab <span>SF6 combo timing</span></h1>
+  <div class="pills">
+    <span class="pill" id="pillFolder"><span class="dot"></span><span>No folder</span></span>
+    <span class="pill" id="pillGame"><span class="dot"></span><span>Game: unknown</span></span>
+    <span class="pill" id="pillActive"><span>Nothing loaded in game</span></span>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <section class="card">
+      <h2>Data folder</h2>
+      <div id="folderBox"></div>
+    </section>
+    <section class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 style="margin:0">Combos</h2>
+        <span class="row" style="gap:6px"><button class="btn small" id="btnImport">Import list</button><button class="btn small" id="btnNew">+ New</button></span>
+      </div>
+      <select id="libFilter" style="width:100%;margin-bottom:10px"></select>
+      <div id="library"><p class="muted">No combos yet.</p></div>
+    </section>
+    <section class="card">
+      <h2>In-game keys</h2>
+      <div class="ink2" style="font-size:13px;line-height:1.9">
+        <kbd>F5</kbd> Develop / Train<br>
+        <kbd>F6</kbd> next combo<br>
+        <kbd>F7</kbd> detail table<br>
+        <kbd>F8</kbd> spam blocker<br>
+        <kbd>F9</kbd> hide overlay<br>
+        <kbd>F10</kbd> training bot<br>
+        <kbd>F11</kbd> Train view (bar / notes)<br>
+        <span class="muted">Overlay only shows in Training mode.</span>
+      </div>
+    </section>
+  </aside>
+
+  <div>
+    <section class="card hidden" id="importCard">
+      <h2>Import a combo list</h2>
+      <div class="row" style="align-items:flex-end;margin-bottom:10px">
+        <label class="f">Character <select id="impFighter"></select></label>
+        <label class="f">Controls <select id="impControl"><option value="classic">Classic</option><option value="modern">Modern</option></select></label>
+      </div>
+      <textarea class="notation" id="impText" rows="8" spellcheck="false" style="font-size:15px" placeholder="# Lights&#10;Light confirm | 2LK, 5LP, 5LK > 236MK&#10;2LK, 2LP, 2LP > SA1&#10;# Drive Rush&#10;DR > 2LK, 5MP~MK > 236MK"></textarea>
+      <div class="muted" style="font-size:12px;margin-top:6px">One combo per line. <span style="font-family:var(--mono)">Name | notation</span> or just the notation. A line starting with <span style="font-family:var(--mono)">#</span> starts a section that prefixes the names below it. Anything in (parentheses) is ignored by the parser.</div>
+      <div class="row" style="margin-top:12px"><button class="btn primary" id="btnDoImport">Import</button><button class="btn" id="btnCancelImport">Close</button><span id="impMsg" class="ink2" style="font-size:13px"></span></div>
+    </section>
+
+    <section class="card" id="editor">
+      <h2>Combo</h2>
+      <div class="row" style="align-items:flex-end">
+        <label class="f">Character
+          <select id="fighter"></select>
+        </label>
+        <label class="f">Controls
+          <select id="control"><option value="classic">Classic</option><option value="modern">Modern</option></select>
+        </label>
+        <label class="f grow">Name
+          <input type="text" id="name" placeholder="e.g. Midscreen DR BnB">
+        </label>
+      </div>
+      <label class="f" style="margin-top:12px">Notation
+        <textarea class="notation" id="notation" rows="2" spellcheck="false" placeholder="2LP > 2LP, 5LK > DR > 5LP, 5HP > DR > 5HK, 5MP~4HP > [2]8HK"></textarea>
+      </label>
+      <div class="muted" style="font-size:12px;margin-top:6px">
+        <b class="ink2">&gt;</b> cancel &nbsp; <b class="ink2">,</b> link &nbsp; <b class="ink2">~</b> chain / target combo &nbsp;·&nbsp;
+        numpad directions, <span style="font-family:var(--mono)">[2]8</span> charge, <span style="font-family:var(--mono)">j.HP</span> / <span style="font-family:var(--mono)">cr.MK</span> ok, <span style="font-family:var(--mono)">DR DI 66 SA1</span>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div id="override"></div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn primary" id="btnDevelop">Develop in game</button>
+        <button class="btn" id="btnTrain">Train in game</button>
+        <button class="btn" id="btnSave">Save</button>
+        <span class="grow"></span>
+        <button class="btn" id="btnExport">Export JSON</button>
+        <button class="btn danger" id="btnDelete">Delete</button>
+      </div>
+      <div id="saveMsg" class="muted" style="font-size:12.5px;margin-top:8px"></div>
+    </section>
+
+    <section class="card">
+      <h2>Session options</h2>
+      <div class="row" style="gap:22px">
+        <label class="switch"><input type="checkbox" id="optSpam"> Spam blocker <span class="muted">(Train)</span></label>
+        <label class="switch"><input type="checkbox" id="optRhythm" checked> Rhythm guide <span class="muted">(Train)</span></label>
+        <label class="switch"><input type="checkbox" id="optDemo" checked> Cadence preview</label>
+        <label class="switch"><input type="checkbox" id="optLearn"> Keep learning in Train</label>
+        <label class="switch"><input type="checkbox" id="optDetail"> Detail table</label>
+        <label class="switch"><input type="checkbox" id="optIgnoreSpam" checked> Ignore spammed samples</label>
+        <label class="switch"><input type="checkbox" id="optP2"> I'm on the 2P side</label>
+      </div>
+      <div class="row" style="margin-top:12px;gap:22px">
+        <label class="f">Overlay scale <input type="range" id="optScale" min="0.5" max="2" step="0.05" value="1"></label>
+        <label class="f">Overlay height <input type="range" id="optY" min="0.02" max="0.9" step="0.005" value="0.25"></label>
+        <label class="f">Train view <select id="optView"><option value="bar">Bar</option><option value="notes">Spearmint Twintails (notes)</option><option value="both">Bar + notes</option></select></label>
+        <label class="f">Note flight <input type="range" id="optApproach" min="18" max="72" step="2" value="36"></label>
+        <label class="f">Note colours <select id="optPalette"><option value="classic">Classic (red / white / blue)</option><option value="sf6">SF6 (blue / yellow / red)</option></select></label>
+        <label class="switch"><input type="checkbox" id="optFlip"> Kicks from the left</label>
+        <span class="grow"></span>
+        <button class="btn" id="btnOptions">Apply to game</button>
+      </div>
+    </section>
+
+    <section class="card" id="botCard">
+      <h2>Training bot</h2>
+      <div class="ink2" style="font-size:13px;margin-bottom:12px">Plays combos by itself in Training mode and sweeps every step frame by frame, filling in exact windows and sweet spots. Before starting: dummy on <b>No guard</b>, Drive and Super gauges on <b>infinite / auto-recover</b>, life auto-recover on, Counter setting on <b>Punish Counter</b> for PC combos, and keep your hands off the controller (touching it stops the bot). Playing offline is safest.</div>
+      <div class="row" style="gap:18px;align-items:flex-end">
+        <label class="f">Repeats per frame <select id="botReps"><option value="1">1 (fast)</option><option value="2" selected>2</option><option value="3">3 (thorough)</option></select></label>
+        <label class="f">Position <select id="botPos"><option value="">Auto (from name)</option><option value="mid">Midscreen</option><option value="corner">Corner</option></select></label>
+        <label class="f">Extra spacing <input type="range" id="botSpacing" min="0" max="200" step="5" value="0"></label>
+        <label class="switch"><input type="checkbox" id="botSweet" checked> Sweet-spot pass</label>
+        <label class="switch"><input type="checkbox" id="botReset" checked> Replace existing profile</label>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary" id="btnBotOne">Profile this combo</button>
+        <button class="btn" id="btnBotAll">Profile all combos for this character</button>
+        <button class="btn danger" id="btnBotStop">Stop</button>
+      </div>
+      <div id="botStatus" style="margin-top:14px"></div>
+    </section>
+
+    <section class="card">
+      <div class="tabs">
+        <button class="tab on" data-tab="profile">Timing profile</button>
+        <button class="tab" data-tab="train">Training history</button>
+        <span class="grow"></span>
+        <button class="btn small" id="btnResetProfile" style="margin:6px 0">Reset profile</button>
+      </div>
+      <div id="tabProfile"></div>
+      <div id="tabTrain" class="hidden"></div>
+    </section>
+  </div>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+/* ===================== notation parser (shared with tests) ===================== */
+const FIGHTERS = {1:"Ryu",2:"Luke",3:"Kimberly",4:"Chun-Li",5:"Manon",6:"Zangief",7:"JP",8:"Dhalsim",9:"Cammy",10:"Ken",11:"Dee Jay",12:"Lily",13:"A.K.I.",14:"Rashid",15:"Blanka",16:"Juri",17:"Marisa",18:"Guile",19:"Ed",20:"E. Honda",21:"Jamie",22:"Akuma",25:"Sagat",26:"M. Bison",27:"Terry",28:"Mai",29:"Elena",30:"Viper",31:"Alex",32:"Ingrid",33:"Yasmine"};
+const CB = {LP:16, MP:32, HP:64, LK:128, MK:256, HK:512};
+const MB = {L:0x10, M:0x80, H:0x100, SP:0x20, AS:0x200, DI:0x1000, DP:0x40, THROW:0x2000};
+const ALL_P = 16|32|64, ALL_K = 128|256|512;
+
+const TRIGGER_PRESETS = {
+  classic: [
+    ["LP",{type:"button",mask:CB.LP,mode:"all"}],["MP",{type:"button",mask:CB.MP,mode:"all"}],["HP",{type:"button",mask:CB.HP,mode:"all"}],
+    ["LK",{type:"button",mask:CB.LK,mode:"all"}],["MK",{type:"button",mask:CB.MK,mode:"all"}],["HK",{type:"button",mask:CB.HK,mode:"all"}],
+    ["Any punch",{type:"button",mask:ALL_P,mode:"any"}],["Any kick",{type:"button",mask:ALL_K,mode:"any"}],
+    ["Any button",{type:"button",mask:ALL_P|ALL_K,mode:"any"}],
+    ["MP+MK (DR / parry)",{type:"button",mask:CB.MP|CB.MK,mode:"all"}],["HP+HK (DI)",{type:"button",mask:CB.HP|CB.HK,mode:"all"}],
+    ["LP+LK (throw)",{type:"button",mask:CB.LP|CB.LK,mode:"all"}],["66 dash",{type:"dash",mask:0,mode:"all"}],["Jump (up)",{type:"jump",mask:0,mode:"all"}],
+  ],
+  modern: [
+    ["L",{type:"button",mask:MB.L,mode:"all"}],["M",{type:"button",mask:MB.M,mode:"all"}],["H",{type:"button",mask:MB.H,mode:"all"}],
+    ["SP",{type:"button",mask:MB.SP,mode:"all"}],["Assist",{type:"button",mask:MB.AS,mode:"all"}],["DI",{type:"button",mask:MB.DI,mode:"all"}],
+    ["Parry / DR",{type:"button",mask:MB.DP,mode:"all"}],["Any attack",{type:"button",mask:MB.L|MB.M|MB.H|MB.SP,mode:"any"}],
+    ["66 dash",{type:"dash",mask:0,mode:"all"}],["Jump (up)",{type:"jump",mask:0,mode:"all"}],
+  ],
+};
+
+function splitNotation(text) {
+  // returns [{sep, raw}], separators: > , ~ xx -> →  (whitespace between tokens = link)
+  const out = [];
+  const re = /\s*(xx|->|→|>|,|~)\s*|\s+/gi;
+  let last = 0, sep = "start", m;
+  const cleaned = text.replace(/\(([^)]*)\)/g, " ").trim();
+  while ((m = re.exec(cleaned)) !== null) {
+    const raw = cleaned.slice(last, m.index).trim();
+    if (raw) { out.push({sep: out.length ? sep : "start", raw}); sep = ","; }
+    if (m[1]) {
+      const s = m[1].toLowerCase();
+      sep = (s === "xx" || s === "->" || s === "→") ? ">" : s;
+    }
+    last = re.lastIndex;
+  }
+  const tail = cleaned.slice(last).trim();
+  if (tail) out.push({sep: out.length ? sep : "start", raw: tail});
+  return out;
+}
+
+function parseToken(raw, control) {
+  let up = raw.toUpperCase().replace(/\s+/g, "");
+  const step = {label: up, kind: "hit", trigger: null, error: null};
+  const modern = control === "modern";
+  const btnTrig = (mask, mode="all") => ({type:"button", mask, mode});
+  // whole-token specials
+  if (/^(DR|DRC|PDR|DRIVERUSH|RUSH)$/.test(up)) { step.kind = "move"; step.label = "DR"; step.trigger = btnTrig(modern ? MB.DP : CB.MP|CB.MK); return step; }
+  if (/^(DI|DRIVEIMPACT)$/.test(up)) { step.label = "DI"; step.trigger = btnTrig(modern ? MB.DI : CB.HP|CB.HK); return step; }
+  if (/^(DP|PARRY|DPARRY)$/.test(up)) { step.kind = "move"; step.label = "Parry"; step.trigger = btnTrig(modern ? MB.DP : CB.MP|CB.MK); return step; }
+  if (/^(66|DASH|FDASH)$/.test(up)) { step.kind = "move"; step.label = "66"; step.trigger = {type:"dash", mask:0, mode:"all"}; return step; }
+  if (/^([789]|J|JUMP|SJ|NJ|FJ)$/.test(up)) { step.kind = "move"; step.trigger = {type:"jump", mask:0, mode:"all"}; return step; }
+  if (/^(THROW|LPLK|LP\+LK)$/.test(up)) { step.label = "Throw"; step.trigger = btnTrig(modern ? MB.THROW : CB.LP|CB.LK); return step; }
+  if (/^(SA[123]?|CA)$/.test(up)) { step.trigger = btnTrig(modern ? (MB.L|MB.M|MB.H|MB.SP) : ALL_P|ALL_K, "any"); return step; }
+  // prefixes
+  let body = up;
+  let prefix = "";
+  let m;
+  if ((m = body.match(/^(J|NJ|FJ|BJ)\.?(?=\d*(?:[LMH]?[PK]|[LMH]|SP))/))) { prefix = "j."; body = body.slice(m[0].length); }
+  else if ((m = body.match(/^(CR|C)\.(?=.)/))) { body = "2" + body.slice(m[0].length); }
+  else if ((m = body.match(/^(ST|S|CL|F)\.(?=.)/))) { body = "5" + body.slice(m[0].length); }
+  m = body.match(/^((?:\[\d\])?\d*)(.+)$/);
+  if (!m) { step.error = "can't read this step"; return step; }
+  const dir = m[1];
+  let btns = m[2].replace(/\+/g, "");
+  let held = false;
+  const hm = btns.match(/^\[([A-Z]+)\]$/);   // held button, e.g. 236[PP]
+  if (hm) { btns = hm[1]; held = true; }
+  let mask = 0, mode = "all";
+  if (modern) {
+    const toks = btns.match(/AUTO|SP|AS|DI|L|M|H/g);
+    if (!toks || toks.join("") !== btns) { step.error = `unknown button "${m[2]}" (modern: L M H SP AS DI)`; return step; }
+    for (const t of toks) { if (t === "AUTO") { mask |= MB.L|MB.M|MB.H; mode = "any"; } else mask |= MB[t]; }
+  } else {
+    const toks = btns.match(/[LMH][PK]|PPP|KKK|PP|KK|P|K/g);
+    if (!toks || toks.join("") !== btns) { step.error = `unknown button "${m[2]}" (use LP MP HP LK MK HK, P, K)`; return step; }
+    for (const t of toks) {
+      if (CB[t]) mask |= CB[t];
+      else if (t === "P" || t === "PP") { mask |= ALL_P; mode = "any"; }
+      else if (t === "K" || t === "KK") { mask |= ALL_K; mode = "any"; }
+      else if (t === "PPP") mask |= ALL_P;
+      else if (t === "KKK") mask |= ALL_K;
+    }
+  }
+  step.label = prefix + dir + (held ? "[" + btns + "]" : btns);
+  step.trigger = {type: "button", mask, mode};
+  return step;
+}
+
+function parseCombo(text, control, overrides) {
+  const parts = splitNotation(text || "");
+  return parts.map((p, i) => {
+    const st = parseToken(p.raw, control);
+    st.sep = i === 0 ? "start" : p.sep;
+    const ov = overrides && overrides[i];
+    if (ov) {
+      if (ov.kind) st.kind = ov.kind;
+      if (ov.trigger) { st.trigger = ov.trigger; st.error = null; }
+      st.overridden = true;
+    }
+    return st;
+  });
+}
+
+function hashSteps(steps) {
+  const s = JSON.stringify(steps.map(x => [x.label, x.sep, x.kind, x.trigger]));
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+
+function triggerText(t, control) {
+  if (!t) return "?";
+  if (t.type === "dash") return "66";
+  if (t.type === "jump") return "up";
+  const names = control === "modern" ? Object.entries(MB) : Object.entries(CB);
+  const on = names.filter(([n, b]) => (t.mask & b) !== 0).map(([n]) => n);
+  if (t.mode === "any") return "any " + on.join("/");
+  return on.join("+") || "?";
+}
+/* =================== end parser =================== */
+
+const PAGE_VERSION = "1.4.1";
+const $ = (id) => document.getElementById(id);
+const arr = (x) => Array.isArray(x) ? x : [];
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const RES_LABEL = {ok:"clean", early:"early", late:"late", wrong:"wrong move", missed:"missed", eaten:"eaten", whiff:"whiff", skipped:"skipped", spam:"spam", pending:"-"};
+const REASONS = [["early","Early","--c-early"],["late","Late","--c-late"],["wrong","Wrong move","--c-wrong"],["missed","Missed / eaten","--c-missed"],["spam","Spam","--c-spam"],["other","Other","--c-other"]];
+const reasonOf = r => r === "early" ? "early" : r === "late" ? "late" : r === "wrong" ? "wrong" : (r === "missed" || r === "eaten") ? "missed" : r === "spam" ? "spam" : "other";
+
+/* ===================== storage (File System Access) ===================== */
+const FS = {
+  root: null, ok: false, supported: "showDirectoryPicker" in window,
+  async idb() {
+    return new Promise((res, rej) => { const r = indexedDB.open("combolab", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  },
+  async saveHandle(h) { try { const db = await this.idb(); db.transaction("kv", "readwrite").objectStore("kv").put(h, "root"); } catch (e) {} },
+  async loadHandle() { try { const db = await this.idb(); return await new Promise(r => { const q = db.transaction("kv").objectStore("kv").get("root"); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); } catch (e) { return null; } },
+  async resolve(h) {
+    // accept the game folder, reframework, reframework/data or ComboLab itself
+    const has = async (d, n) => { try { await d.getDirectoryHandle(n); return true; } catch (e) { return false; } };
+    if (h.name.toLowerCase() === "combolab") return h;
+    if (await has(h, "reframework")) h = await h.getDirectoryHandle("reframework");
+    if (h.name.toLowerCase() === "reframework") h = await h.getDirectoryHandle("data", {create: true});
+    if (h.name.toLowerCase() === "data") return await h.getDirectoryHandle("ComboLab", {create: true});
+    if (await has(h, "combos")) return h;
+    if (!confirm(`"${h.name}" doesn't look like the SF6 folder or reframework/data/ComboLab. Use it anyway?`)) return null;
+    return h;
+  },
+  async pick() {
+    const h = await window.showDirectoryPicker({id: "combolab", mode: "readwrite"});
+    const r = await this.resolve(h);
+    if (!r) return false;
+    this.root = r; this.ok = true;
+    await this.saveHandle(r);
+    return true;
+  },
+  async restore(prompt) {
+    const h = await this.loadHandle();
+    if (!h) return "none";
+    let p = await h.queryPermission({mode: "readwrite"});
+    if (p !== "granted" && prompt) p = await h.requestPermission({mode: "readwrite"});
+    this.root = h;
+    this.ok = p === "granted";
+    return this.ok ? "ok" : "prompt";
+  },
+  async dir(parts, create) {
+    let d = this.root;
+    for (const p of parts) d = await d.getDirectoryHandle(p, {create});
+    return d;
+  },
+  async read(path) {
+    if (!this.ok) return null;
+    try {
+      const parts = path.split("/"); const name = parts.pop();
+      const d = await this.dir(parts, false);
+      const f = await (await d.getFileHandle(name)).getFile();
+      return {mtime: f.lastModified, data: JSON.parse(await f.text())};
+    } catch (e) { return null; }
+  },
+  async write(path, obj) {
+    const parts = path.split("/"); const name = parts.pop();
+    const d = await this.dir(parts, true);
+    const w = await (await d.getFileHandle(name, {create: true})).createWritable();
+    await w.write(JSON.stringify(obj, null, 1)); await w.close();
+  },
+  async remove(path) {
+    const parts = path.split("/"); const name = parts.pop();
+    const d = await this.dir(parts, false);
+    await d.removeEntry(name);
+  },
+  async list(dirPath) {
+    const out = [];
+    try { const d = await this.dir(dirPath.split("/"), true); for await (const [n, h] of d.entries()) if (h.kind === "file" && n.endsWith(".json")) out.push(n); } catch (e) {}
+    return out;
+  },
+};
+
+/* ===================== storage (ComboLab server over HTTP) =====================
+   When the page is served by combolab_server.py the same FS interface talks to
+   the server instead, so it works from any device on the network. */
+const SERVER = location.protocol === "http:" || location.protocol === "https:";
+if (SERVER) {
+  const tok = () => { try { return localStorage.getItem("combolab_token") || ""; } catch (e) { return ""; } };
+  const api = (path, opts = {}) => fetch(path, {...opts, headers: {...(opts.headers || {}), "X-ComboLab-Token": tok()}});
+  Object.assign(FS, {
+    supported: true, server: true,
+    async connect() {
+      let r = await api("/api/info");
+      if (r.status === 401) {
+        const t = prompt("This ComboLab server needs its token:");
+        if (t) { try { localStorage.setItem("combolab_token", t); } catch (e) {} r = await api("/api/info"); }
+      }
+      if (!r.ok) { this.ok = false; return false; }
+      const info = await r.json();
+      this.root = {name: info.root}; this.ok = true;
+      return true;
+    },
+    async restore() { try { return (await this.connect()) ? "ok" : "none"; } catch (e) { this.ok = false; return "none"; } },
+    async pick() { return this.connect(); },
+    async read(path) {
+      if (!this.ok) return null;
+      try { const r = await api("/api/file?path=" + encodeURIComponent(path)); return r.ok ? await r.json() : null; } catch (e) { return null; }
+    },
+    async write(path, obj) {
+      const r = await api("/api/file?path=" + encodeURIComponent(path), {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(obj)});
+      if (!r.ok) throw new Error("write failed: " + r.status);
+    },
+    async remove(path) { await api("/api/file?path=" + encodeURIComponent(path), {method: "DELETE"}); },
+    async list(dir) {
+      try { const r = await api("/api/list?dir=" + encodeURIComponent(dir)); return r.ok ? (await r.json()).files : []; } catch (e) { return []; }
+    },
+  });
+}
+
+/* ===================== app state ===================== */
+const st = {
+  combos: {}, sel: null, draft: null, overrideIdx: null,
+  status: null, statusMtime: 0, profile: null, profileMtime: 0, session: null, sessionMtime: 0,
+  tab: "profile",
+};
+
+function newDraft() {
+  return {id: null, name: "", fighter_id: 18, control: "classic", notation: "", overrides: {}, version: 0, notes: ""};
+}
+
+function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "combo"; }
+
+function buildCombo(d) {
+  const steps = parseCombo(d.notation, d.control, d.overrides).map(s => ({label: s.label, sep: s.sep, kind: s.kind, trigger: s.trigger, error: s.error}));
+  const hash = hashSteps(steps);
+  return {steps, hash};
+}
+
+/* ===================== rendering: header / folder / library ===================== */
+function renderFolder() {
+  const box = $("folderBox");
+  const pf = $("pillFolder");
+  if (FS.server) {
+    if (FS.ok) {
+      box.innerHTML = `<div class="ink2" style="font-size:13px">Connected to the ComboLab server at <b style="color:var(--ink)">${esc(location.host)}</b></div>`;
+      pf.innerHTML = `<span class="dot on"></span><span>Server</span>`;
+    } else {
+      box.innerHTML = `<div class="ink2" style="font-size:13px;margin-bottom:10px">Can't reach the ComboLab server.</div><button class="btn primary" id="btnPick">Retry</button>`;
+      pf.innerHTML = `<span class="dot off"></span><span>Server offline</span>`;
+    }
+    const bp = $("btnPick"); if (bp) bp.onclick = async () => { if (await FS.pick()) await afterConnect(); renderFolder(); };
+    return;
+  }
+  if (!FS.supported) {
+    box.innerHTML = `<div class="notice">This browser can't open local folders. Use <b>Chrome</b> or <b>Edge</b> for the live link. Here you can still build a combo and use <b>Export JSON</b>, then drop the file into <code>reframework/data/ComboLab/combos</code>.</div>`;
+    pf.innerHTML = `<span class="dot warn"></span><span>Export only</span>`;
+    return;
+  }
+  if (FS.ok) {
+    box.innerHTML = `<div class="ink2" style="font-size:13px">Linked to <b style="color:var(--ink)">${esc(FS.root.name)}</b></div><button class="btn small" style="margin-top:10px" id="btnPick">Change folder</button>`;
+    pf.innerHTML = `<span class="dot on"></span><span>Folder linked</span>`;
+  } else if (FS.root) {
+    box.innerHTML = `<div class="ink2" style="font-size:13px;margin-bottom:10px">Browser needs permission again for <b>${esc(FS.root.name)}</b>.</div><button class="btn primary" id="btnReconnect">Reconnect folder</button>`;
+    pf.innerHTML = `<span class="dot warn"></span><span>Reconnect needed</span>`;
+  } else {
+    box.innerHTML = `<div class="ink2" style="font-size:13px;margin-bottom:10px">Pick your <b>Street Fighter 6</b> game folder (or <code>reframework/data/ComboLab</code>). Combos, profiles and commands are exchanged through files there.</div><button class="btn primary" id="btnPick">Choose folder</button>`;
+    pf.innerHTML = `<span class="dot off"></span><span>No folder</span>`;
+  }
+  const bp = $("btnPick"); if (bp) bp.onclick = async () => { try { if (await FS.pick()) await afterConnect(); } catch (e) {} renderFolder(); };
+  const br = $("btnReconnect"); if (br) br.onclick = async () => { await FS.restore(true); if (FS.ok) await afterConnect(); renderFolder(); };
+}
+
+// Sidebar filter: "follow" = the character picked in the editor, "all", or a fighter id.
+let libFilter = (() => { try { return localStorage.getItem("combolab_libfilter") || "follow"; } catch (e) { return "follow"; } })();
+const libOpen = {};   // remembered open/closed state of section groups
+
+function renderLibFilter() {
+  const counts = {};
+  for (const c of Object.values(st.combos)) { const k = String(c.fighter_id || 0); counts[k] = (counts[k] || 0) + 1; }
+  const opts = [`<option value="follow">Character in editor</option>`, `<option value="all">All characters</option>`];
+  Object.keys(counts).map(Number).sort((a, b) => (FIGHTERS[a] || "~").localeCompare(FIGHTERS[b] || "~"))
+    .forEach(id => opts.push(`<option value="${id}">${esc(FIGHTERS[id] || "Other")} (${counts[id]})</option>`));
+  const sel = $("libFilter");
+  sel.innerHTML = opts.join("");
+  sel.value = libFilter;
+  if (sel.value !== libFilter) { libFilter = "follow"; sel.value = "follow"; }
+}
+
+function renderLibrary() {
+  renderLibFilter();
+  const lib = $("library");
+  let items = Object.values(st.combos);
+  if (!items.length) { lib.innerHTML = `<p class="muted" style="margin:0">No combos yet. Type one in the editor and save, or use Import list.</p>`; return; }
+  const fid = libFilter === "follow" ? +$("fighter").value : (libFilter === "all" ? null : +libFilter);
+  if (fid != null) items = items.filter(c => +c.fighter_id === fid);
+  if (!items.length) { lib.innerHTML = `<p class="muted" style="margin:0">No combos for ${esc(FIGHTERS[fid] || "this character")} yet. Type one in the editor or use Import list.</p>`; return; }
+  const item = c => {
+    const nm = String(c.name || c.id);
+    const short = nm.includes(": ") ? nm.slice(nm.indexOf(": ") + 2) : nm;
+    return `<button class="lib-item ${st.sel === c.id ? "sel" : ""}" data-id="${esc(c.id)}">${esc(short)}
+      ${st.status && st.status.combo_id === c.id ? ` <span class="muted" style="font-size:11px">· in game</span>` : ""}
+      <small>${esc(c.notation || "")}</small></button>`;
+  };
+  // group by character (when showing all), then by "Section: " name prefix
+  const byF = {};
+  for (const c of items) (byF[c.fighter || "Other"] ||= []).push(c);
+  lib.innerHTML = Object.keys(byF).sort().map(g => {
+    const secs = {}, order = [];
+    for (const c of byF[g]) {
+      const nm = String(c.name || "");
+      const sec = nm.includes(": ") ? nm.slice(0, nm.indexOf(": ")) : "";
+      if (!secs[sec]) { secs[sec] = []; order.push(sec); }
+      secs[sec].push(c);
+    }
+    order.sort((a, b) => (/^bnb/i.test(b) - /^bnb/i.test(a)) || a.localeCompare(b));
+    const body = order.map(sec => {
+      const list = secs[sec].map(item).join("");
+      if (!sec || order.length === 1) return list;
+      const key = g + "/" + sec;
+      const open = libOpen[key] ?? secs[sec].some(c => c.id === st.sel);
+      return `<details class="lib-sec" data-key="${esc(key)}" ${open ? "open" : ""}><summary>${esc(sec)} <span>${secs[sec].length}</span></summary>${list}</details>`;
+    }).join("");
+    return `<div class="lib-group">${fid == null ? `<h3>${esc(g)}</h3>` : ""}${body}</div>`;
+  }).join("");
+  lib.querySelectorAll(".lib-item").forEach(b => b.onclick = () => selectCombo(b.dataset.id));
+  lib.querySelectorAll("details.lib-sec").forEach(d => d.addEventListener("toggle", () => { libOpen[d.dataset.key] = d.open; }));
+}
+
+function renderHeaderStatus() {
+  const s = st.status;
+  const pg = $("pillGame"), pa = $("pillActive");
+  if (!s) { pg.innerHTML = `<span class="dot"></span><span>Game: no status</span>`; pa.innerHTML = `<span>Nothing loaded in game</span>`; return; }
+  const age = Date.now() / 1000 - (s.time || 0);
+  const live = age < 12;
+  pg.innerHTML = `<span class="dot ${live ? (s.in_training ? "on" : "warn") : "off"}"></span><span>${live ? (s.in_training ? "Game: in Training" : "Game: running (not in Training)") : "Game: not running"}${s.version ? " · mod v" + esc(s.version) : ""}${s.version && s.version !== PAGE_VERSION ? ` <b style="color:var(--warning)">(page is v${PAGE_VERSION}: update the mod files)</b>` : ""}</span>`;
+  const c = s.combo_id && st.combos[s.combo_id];
+  pa.innerHTML = c ? `<span>${s.mode === "train" ? "TRAIN" : "DEVELOP"} · ${esc(c.name || c.id)}</span>` : `<span>Nothing loaded in game</span>`;
+}
+
+/* ===================== editor ===================== */
+function fillFighters() {
+  const sel = $("fighter");
+  sel.innerHTML = Object.entries(FIGHTERS).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join("");
+}
+
+function loadDraftIntoForm() {
+  const d = st.draft;
+  $("fighter").value = d.fighter_id;
+  $("control").value = d.control;
+  $("name").value = d.name;
+  $("notation").value = d.notation;
+  st.overrideIdx = null;
+  renderChips();
+}
+
+function readForm() {
+  const d = st.draft;
+  d.fighter_id = +$("fighter").value;
+  d.control = $("control").value;
+  d.name = $("name").value.trim();
+  d.notation = $("notation").value;
+}
+
+function renderChips() {
+  const d = st.draft;
+  const steps = parseCombo(d.notation, d.control, d.overrides);
+  const box = $("chips");
+  if (!steps.length) { box.innerHTML = `<span class="muted" style="font-size:13px">Steps appear here as you type.</span>`; $("override").innerHTML = ""; return; }
+  const win = st.profile && arr(st.profile.windows);
+  box.innerHTML = steps.map((s, i) => {
+    const sep = i === 0 ? "" : `<span class="sep">${s.sep === "," ? "," : s.sep === "~" ? "~" : "&gt;"}</span>`;
+    const w = win && win[i];
+    const wtxt = w && w.n ? ` · ${w.E}–${w.L}f` : "";
+    return `${sep}<button class="chip ${s.error ? "err" : ""} ${st.overrideIdx === i ? "sel" : ""}" data-i="${i}" title="${esc(s.error || "click to adjust")}">
+      <span>${esc(s.label)}</span>
+      <span class="k"><span class="kind" style="background:var(--${s.kind === "move" ? "move" : "hit"})"></span>${s.kind === "move" ? "move" : "hit"} · ${esc(triggerText(s.trigger, d.control))}${wtxt}${s.overridden ? " ·" + " edited" : ""}</span>
+    </button>`;
+  }).join("");
+  box.querySelectorAll(".chip").forEach(c => c.onclick = () => { st.overrideIdx = st.overrideIdx === +c.dataset.i ? null : +c.dataset.i; renderChips(); });
+  renderOverride(steps);
+  const errs = steps.filter(s => s.error);
+  $("saveMsg").innerHTML = errs.length ? `<span class="error">${errs.length} step${errs.length > 1 ? "s" : ""} need attention: ${esc(errs[0].error)}. Click the red step to set its button.</span>` : "";
+}
+
+function renderOverride(steps) {
+  const box = $("override");
+  const i = st.overrideIdx;
+  if (i == null || !steps[i]) { box.innerHTML = ""; return; }
+  const d = st.draft, s = steps[i];
+  const presets = TRIGGER_PRESETS[d.control];
+  const cur = JSON.stringify(s.trigger);
+  box.innerHTML = `<div class="override">
+    <div class="row" style="align-items:flex-end">
+      <b style="font-family:var(--mono);font-size:16px">${esc(s.label)}</b>
+      <label class="f">Counts as
+        <select id="ovKind"><option value="hit">Hit (must connect)</option><option value="move">Movement (DR, dash, jump)</option></select></label>
+      <label class="f">Trigger (the press we time)
+        <select id="ovTrig"><option value="">Auto from notation</option>${presets.map(([n, t], k) => `<option value="${k}" ${JSON.stringify(t) === cur && s.overridden ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
+      <button class="btn small" id="ovReset">Reset</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">The trigger is the button press whose timing gets measured for this step (the last button of a motion). Movement steps succeed when the action comes out; hit steps must connect.</div>
+  </div>`;
+  $("ovKind").value = s.kind;
+  $("ovKind").onchange = e => { (d.overrides[i] ||= {}).kind = e.target.value; renderChips(); };
+  $("ovTrig").onchange = e => {
+    const o = (d.overrides[i] ||= {});
+    if (e.target.value === "") delete o.trigger; else o.trigger = presets[+e.target.value][1];
+    renderChips();
+  };
+  $("ovReset").onclick = () => { delete d.overrides[i]; renderChips(); };
+}
+
+async function saveDraft() {
+  readForm();
+  const d = st.draft;
+  const {steps, hash} = buildCombo(d);
+  if (!steps.length) { $("saveMsg").innerHTML = `<span class="error">Type a combo first.</span>`; return null; }
+  if (steps.some(s => s.error)) { renderChips(); return null; }
+  if (!d.id) d.id = slug((FIGHTERS[d.fighter_id] || "x") + "-" + (d.name || "combo")) + "-" + Math.random().toString(36).slice(2, 6);
+  if (!d.name) d.name = d.notation.slice(0, 40);
+  const prev = st.combos[d.id];
+  const version = prev && prev.hash === hash ? (prev.version || 1) : ((prev && prev.version) || 0) + 1;
+  const combo = {
+    format: "combolab.combo/1", id: d.id, name: d.name, fighter_id: d.fighter_id, fighter: FIGHTERS[d.fighter_id] || "",
+    control: d.control, notation: d.notation.trim(), version, hash,
+    steps: steps.map(s => ({label: s.label, sep: s.sep, kind: s.kind, trigger: s.trigger})),
+    overrides: d.overrides, updated: new Date().toISOString(),
+  };
+  if (FS.ok) {
+    await FS.write(`combos/${combo.id}.json`, combo);
+    $("saveMsg").textContent = prev && prev.hash !== hash ? "Saved. Steps changed, so the old timing profile will reset in game." : "Saved.";
+  } else {
+    $("saveMsg").textContent = "Not linked to a folder: use Export JSON.";
+  }
+  st.combos[combo.id] = combo;
+  const switched = st.sel !== combo.id;
+  st.sel = combo.id;
+  if (switched) { st.profile = null; st.session = null; st.profileMtime = 0; st.sessionMtime = 0; }
+  renderLibrary();
+  renderTabs();
+  pollData(true);
+  return combo;
+}
+
+async function sendCommand(cmd) {
+  if (!FS.ok) { $("saveMsg").textContent = "Link the game folder first."; return; }
+  cmd.seq = Date.now();
+  await FS.write("command.json", cmd);
+}
+
+function optionsFromForm() {
+  return {
+    spam_block: $("optSpam").checked, learn_in_train: $("optLearn").checked, show_detail: $("optDetail").checked,
+    ignore_spam_samples: $("optIgnoreSpam").checked, user_side: $("optP2").checked ? 1 : 0,
+    scale: +$("optScale").value, y: +$("optY").value,
+    rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked,
+    train_view: $("optView").value, note_approach: +$("optApproach").value, note_flip: $("optFlip").checked, note_palette: $("optPalette").value,
+  };
+}
+
+function optionsToForm(o) {
+  if (!o) return;
+  $("optSpam").checked = !!o.spam_block; $("optLearn").checked = !!o.learn_in_train;
+  $("optDetail").checked = !!o.show_detail; $("optIgnoreSpam").checked = o.ignore_spam_samples !== false;
+  $("optP2").checked = o.user_side === 1;
+  $("optRhythm").checked = o.rhythm !== false; $("optDemo").checked = o.rhythm_demo !== false;
+  if (o.train_view) $("optView").value = o.train_view;
+  if (o.note_approach) $("optApproach").value = o.note_approach;
+  $("optFlip").checked = !!o.note_flip;
+  if (o.note_palette) $("optPalette").value = o.note_palette;
+  if (o.scale) $("optScale").value = o.scale;
+  if (o.y) $("optY").value = o.y;
+}
+
+async function selectCombo(id) {
+  const c = st.combos[id];
+  if (!c) return;
+  st.sel = id;
+  st.draft = {id: c.id, name: c.name || "", fighter_id: c.fighter_id || 18, control: c.control || "classic", notation: c.notation || "", overrides: c.overrides || {}, version: c.version};
+  st.profile = null; st.session = null; st.profileMtime = 0; st.sessionMtime = 0;
+  loadDraftIntoForm();
+  renderLibrary();
+  await pollData(true);
+}
+
+/* ===================== charts ===================== */
+const tip = $("tip");
+function showTip(e, html) { tip.innerHTML = html; tip.style.display = "block"; const x = Math.min(e.clientX + 14, innerWidth - 300); tip.style.left = x + "px"; tip.style.top = (e.clientY + 14) + "px"; }
+function hideTip() { tip.style.display = "none"; }
+
+function renderProfile() {
+  const box = $("tabProfile");
+  const c = st.combos[st.sel];
+  if (!c) { box.innerHTML = `<p class="muted">Select or save a combo.</p>`; return; }
+  const P = st.profile;
+  if (!P || !P.steps) {
+    box.innerHTML = `<div class="notice"><b>No timing data yet.</b> Click <b>Develop in game</b>, go into Training mode and do the combo a bunch of times: clean runs, drops, early and late on purpose. Each attempt adds samples; the windows below fill in as you go.</div>`;
+    return;
+  }
+  const steps = c.steps;
+  const W = arr(P.windows); P.steps = arr(P.steps);
+  const rate = P.attempts ? Math.round(100 * P.successes / P.attempts) : 0;
+  let html = `<div class="tiles">
+    <div class="tile"><div class="v">${P.attempts || 0}</div><div class="l">develop attempts</div></div>
+    <div class="tile"><div class="v">${P.successes || 0}</div><div class="l">clean (${rate}%)</div></div>
+    <div class="tile"><div class="v">${W.filter((w, i) => i > 0 && w && w.n).length}/${Math.max(0, steps.length - 1)}</div><div class="l">steps with a window</div></div>
+  </div>`;
+  // shared frame axis
+  let lo = Infinity, hi = -Infinity;
+  const consider = v => { if (typeof v === "number" && isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } };
+  steps.forEach((s, i) => { if (i === 0) return; const w = W[i]; if (w && w.n) { consider(w.E_soft); consider(w.L_soft); consider(w.o); } arr(P.steps[i]?.samples).forEach(x => consider(x.p)); });
+  if (!isFinite(lo)) { lo = 0; hi = 20; }
+  lo = Math.floor(lo) - 2; hi = Math.ceil(hi) + 2;
+  const rowH = 34, left = 110, right = 16, top = 26;
+  const width = Math.max(560, Math.min(1100, (hi - lo + 1) * 22 + left + right));
+  const plotW = width - left - right;
+  const height = top + rowH * (steps.length - 1) + 30;
+  const fx = f => left + (f - lo) / (hi - lo + 1) * plotW;
+  const cell = plotW / (hi - lo + 1);
+  let svg = `<svg width="${width}" height="${height}" role="img" aria-label="Press timing per combo step">`;
+  // grid
+  for (let f = lo; f <= hi; f++) {
+    const x = fx(f) + cell / 2;
+    if (f % 5 === 0) svg += `<line x1="${x}" x2="${x}" y1="${top - 6}" y2="${height - 24}" stroke="var(--grid)" stroke-width="1"/><text x="${x}" y="${height - 8}" fill="var(--muted)" font-size="11" text-anchor="middle" style="font-variant-numeric:tabular-nums">${f}</text>`;
+  }
+  svg += `<text x="${left}" y="14" fill="var(--muted)" font-size="11">frames after the previous step's action started →</text>`;
+  const pts = [];
+  steps.forEach((s, i) => {
+    if (i === 0) return;
+    const y = top + rowH * (i - 1);
+    const w = W[i];
+    svg += `<text x="${left - 10}" y="${y + rowH / 2 + 4}" fill="var(--ink)" font-size="13" text-anchor="end" font-family="var(--mono)"><tspan fill="var(--muted)">${i + 1} </tspan>${esc(s.label)}</text>`;
+    svg += `<text x="8" y="${y + rowH / 2 + 4}" fill="var(--muted)" font-size="11">${s.sep === "," ? "link" : s.sep === "~" ? "chain" : "cancel"}</text>`;
+    svg += `<rect x="${left}" y="${y + 6}" width="${plotW}" height="${rowH - 12}" fill="var(--surface-2)" rx="4"/>`;
+    if (w && w.n) {
+      svg += `<rect class="hov" data-k="win${i}" x="${fx(w.E_soft)}" y="${y + 6}" width="${(w.L_soft - w.E_soft + 1) * cell}" height="${rowH - 12}" fill="var(--soft)" rx="4"/>`;
+      svg += `<rect class="hov" data-k="win${i}" x="${fx(w.E) + 1}" y="${y + 8}" width="${Math.max(2, (w.L - w.E + 1) * cell - 2)}" height="${rowH - 16}" fill="var(--firm)" rx="3"/>`;
+      if (w.sweet_lo != null) svg += `<rect class="hov" data-k="win${i}" x="${fx(w.sweet_lo) + 1}" y="${y + 12}" width="${Math.max(2, (w.sweet_hi - w.sweet_lo + 1) * cell - 2)}" height="${rowH - 24}" fill="var(--sweet)" rx="2"/>`;
+      if (typeof w.o === "number") svg += `<line x1="${fx(w.o)}" x2="${fx(w.o)}" y1="${y + 3}" y2="${y + rowH - 3}" stroke="var(--warning)" stroke-width="2"/>`;
+    }
+    const samples = arr(P.steps[i]?.samples).slice(-80);
+    const counts = {};
+    samples.forEach(sm => {
+      if (typeof sm.p !== "number") return;
+      const key = sm.p + (sm.res === "ok" ? "o" : "f");
+      const n = counts[key] = (counts[key] || 0) + 1;
+      const cx = fx(sm.p) + cell / 2;
+      const cy = sm.res === "ok" ? y + 11 + ((n - 1) % 3) * 4 : y + rowH - 11 - ((n - 1) % 3) * 4;
+      const idx = pts.length; pts.push({i, sm});
+      if (sm.res === "ok") svg += `<circle class="hov" data-p="${idx}" cx="${cx}" cy="${cy}" r="4" fill="var(--good)" stroke="var(--surface)" stroke-width="2"/>`;
+      else svg += `<g class="hov" data-p="${idx}"><circle cx="${cx}" cy="${cy}" r="6" fill="transparent"/><path d="M${cx - 3.5} ${cy - 3.5}L${cx + 3.5} ${cy + 3.5}M${cx + 3.5} ${cy - 3.5}L${cx - 3.5} ${cy + 3.5}" stroke="var(--critical)" stroke-width="2.2" stroke-linecap="round"/></g>`;
+    });
+  });
+  svg += `</svg>`;
+  html += `<div class="legend"><span><i style="background:var(--firm)"></i>clean press range</span><span><i style="background:var(--sweet);outline:1px solid var(--firm)"></i>sweet spot (also keeps the next step alive)</span><span><i style="background:var(--soft)"></i>estimated edge (from drops / hitstun left)</span><span><i style="background:var(--good);border-radius:50%"></i>clean press</span><span style="color:var(--critical)">✕</span><span style="margin-left:-10px">failed press</span><span><i style="background:var(--warning);width:3px"></i>you were free to act (links)</span></div>`;
+  html += `<div class="chart">${svg}</div>`;
+  // table
+  html += `<div class="chart"><table class="t" style="margin-top:14px;min-width:760px"><thead><tr><th>#</th><th>Step</th><th></th><th>Clean / samples</th><th>Press window</th><th>Sweet spot</th><th>Estimated edge</th><th>Came out at</th><th>Free at</th><th>Hit lands</th><th>Opp. recovers</th><th>Hitstun to spare</th></tr></thead><tbody>`;
+  steps.forEach((s, i) => {
+    const w = W[i] || {}; const sm = arr(P.steps[i]?.samples);
+    const okN = sm.filter(x => x.res === "ok").length;
+    const rng = (a, b) => (a == null ? "–" : (a === b || b == null) ? `${a}` : `${a}–${b}`);
+    html += `<tr><td class="muted">${i + 1}</td><td class="m">${esc(s.label)}</td><td class="muted">${i ? (s.sep === "," ? "link" : s.sep === "~" ? "chain" : "cancel") : "start"}</td>
+      <td>${i ? `${okN} / ${sm.length}` : "–"}</td>
+      <td>${w.n ? `<b>${rng(w.E, w.L)}</b> <span class="muted">(${w.L - w.E + 1}f)</span>` : "–"}</td>
+      <td>${w.sweet_lo != null ? `<b>${rng(w.sweet_lo, w.sweet_hi)}</b> <span class="muted">(${Math.round(100 * w.sweet_rate)}% next hits vs ${Math.round(100 * (w.next_rate || 0))}% overall, ${w.sweet_n} runs)</span>` : (w.n && i < steps.length - 1 ? `<span class="muted">${w.sweet_n || 0}/8 runs</span>` : "–")}</td>
+      <td>${w.n && (w.E_soft !== w.E || w.L_soft !== w.L) ? rng(w.E_soft, w.L_soft) : "–"}</td>
+      <td>${rng(w.q_min, w.q_max)}</td><td>${w.o != null ? "+" + Math.floor(w.o) : (i && s.sep !== "," ? "cancel" : "–")}</td>
+      <td>${rng(w.k_min, w.k_max)}</td><td>${w.stun_end != null ? "+" + Math.floor(w.stun_end) : "–"}</td><td>${w.slack_min != null ? w.slack_min + "f" : "–"}</td></tr>`;
+  });
+  html += `</tbody></table></div><p class="muted" style="font-size:12px">All numbers are game frames counted from the frame the previous step's move started. “Free at” is when your previous move recovered (links); “Opp. recovers” is when the opponent's hitstun would have run out; “Hitstun to spare” is the least hitstun left when this hit landed. Estimated edges assume 1 frame later press = 1 frame later hit, so treat them as ±1f.</p>`;
+  box.innerHTML = html;
+  box.querySelectorAll(".hov").forEach(el => {
+    el.addEventListener("mousemove", e => {
+      if (el.dataset.p != null) {
+        const {i, sm} = pts[+el.dataset.p];
+        showTip(e, `<b>${esc(steps[i].label)}</b> pressed at <b>+${sm.p}f</b><br>${RES_LABEL[sm.res] || sm.res}${sm.q != null ? `, came out at +${sm.q}` : ""}${sm.r ? `, ${sm.r}f hitstun left` : ""}${sm.spam ? `<br>${sm.spam} extra press${sm.spam > 1 ? "es" : ""}` : ""}<br><span class="muted">${sm.mode === "train" ? "train" : "develop"}</span>`);
+      } else {
+        const i = +el.dataset.k.slice(3); const w = W[i];
+        showTip(e, `<b>${esc(steps[i].label)}</b><br>clean presses +${w.E} to +${w.L} (${w.n} samples)${w.sweet_lo != null ? `<br>sweet spot +${w.sweet_lo} to +${w.sweet_hi}: next step lands ${Math.round(100 * w.sweet_rate)}% of the time` : ""}${w.E_soft !== w.E || w.L_soft !== w.L ? `<br>estimated edge +${w.E_soft} to +${w.L_soft}` : ""}`);
+      }
+    });
+    el.addEventListener("mouseleave", hideTip);
+  });
+}
+
+function renderTrain() {
+  const box = $("tabTrain");
+  const c = st.combos[st.sel];
+  const S = st.session;
+  const list = arr(S && S.attempts).filter(a => a.mode === "train");
+  if (!c) { box.innerHTML = `<p class="muted">Select a combo.</p>`; return; }
+  if (!list.length) { box.innerHTML = `<div class="notice"><b>No Train attempts yet.</b> Click <b>Train in game</b> once the profile has windows for each step. Train mode grades every press against those windows and fails the run on drops (and on repeated presses when the spam blocker is on).</div>`; return; }
+  const ok = list.filter(a => a.ok).length;
+  let best = 0, run = 0; list.forEach(a => { run = a.ok ? run + 1 : 0; best = Math.max(best, run); });
+  const last20 = list.slice(-20); const ok20 = last20.filter(a => a.ok).length;
+  let html = `<div class="tiles">
+    <div class="tile"><div class="v">${list.length}</div><div class="l">train attempts</div></div>
+    <div class="tile"><div class="v">${Math.round(100 * ok / list.length)}%</div><div class="l">clean overall</div></div>
+    <div class="tile"><div class="v">${Math.round(100 * ok20 / last20.length)}%</div><div class="l">clean, last ${last20.length}</div></div>
+    <div class="tile"><div class="v">${best}</div><div class="l">best streak</div></div>
+  </div>`;
+  // where runs fail: horizontal stacked bars per step
+  const steps = c.steps;
+  const agg = steps.map(() => ({}));
+  list.forEach(a => { if (!a.ok && a.fail_step) { const r = reasonOf(a.steps?.[a.fail_step - 1]?.res || a.result); const m = agg[a.fail_step - 1]; if (m) m[r] = (m[r] || 0) + 1; } });
+  const maxN = Math.max(1, ...agg.map(m => Object.values(m).reduce((x, y) => x + y, 0)));
+  const left = 110, barW = 420, rowH = 26;
+  let svg = `<svg width="${left + barW + 60}" height="${rowH * steps.length + 8}" role="img" aria-label="Drops per step by reason">`;
+  steps.forEach((s, i) => {
+    const y = 4 + i * rowH;
+    svg += `<text x="${left - 10}" y="${y + 15}" text-anchor="end" font-size="13" font-family="var(--mono)" fill="var(--ink)"><tspan fill="var(--muted)">${i + 1} </tspan>${esc(s.label)}</text>`;
+    let x = left; let tot = 0;
+    REASONS.forEach(([key, name, col]) => {
+      const n = agg[i][key] || 0; if (!n) return;
+      const w = n / maxN * barW;
+      svg += `<rect class="hov2" data-t="${esc(s.label)}: ${n} ${name.toLowerCase()}" x="${x}" y="${y + 3}" width="${Math.max(1, w - 2)}" height="${rowH - 8}" rx="3" fill="var(${col})"/>`;
+      x += w; tot += n;
+    });
+    if (tot) svg += `<text x="${x + 6}" y="${y + 15}" font-size="12" fill="var(--ink-2)">${tot}</text>`;
+  });
+  svg += `</svg>`;
+  html += `<h3 style="font-size:13px;margin:4px 0 0">Where runs drop</h3><div class="legend">${REASONS.map(([k, n, c]) => `<span><i style="background:var(${c})"></i>${n}</span>`).join("")}</div><div class="chart">${svg}</div>`;
+  // average offset per step
+  const offs = steps.map(() => []);
+  list.forEach(a => arr(a.steps).forEach((o, i) => { if (o && typeof o.off === "number") offs[i].push(o.off); }));
+  html += `<div class="chart"><table class="t" style="margin:14px 0;min-width:520px"><thead><tr><th>#</th><th>Step</th><th>Graded presses</th><th>In window</th><th>Early (avg)</th><th>Late (avg)</th></tr></thead><tbody>`;
+  steps.forEach((s, i) => {
+    if (!i) return;
+    const a = offs[i]; if (!a.length) { html += `<tr><td class="muted">${i + 1}</td><td class="m">${esc(s.label)}</td><td colspan="4" class="muted">–</td></tr>`; return; }
+    const inw = a.filter(x => x === 0).length, e = a.filter(x => x < 0), l = a.filter(x => x > 0);
+    const avg = v => v.length ? ` <span class="muted">(${(v.reduce((x, y) => x + y, 0) / v.length > 0 ? "+" : "")}${(v.reduce((x, y) => x + y, 0) / v.length).toFixed(1)}f)</span>` : "";
+    html += `<tr><td class="muted">${i + 1}</td><td class="m">${esc(s.label)}</td><td>${a.length}</td><td>${Math.round(100 * inw / a.length)}%</td><td>${e.length}${avg(e)}</td><td>${l.length}${avg(l)}</td></tr>`;
+  });
+  html += `</tbody></table></div>`;
+  html += `<h3 style="font-size:13px;margin:4px 0 6px">Recent attempts</h3>`;
+  html += list.slice(-15).reverse().map(a => `<div class="attempt"><span class="badge" style="color:${a.ok ? "var(--good)" : "var(--critical)"}">${a.ok ? "✓ clean" : "✕ " + esc(RES_LABEL[a.result] || a.result)}</span>
+    <span class="stepres">${arr(a.steps).map((o, i) => `<span class="${o.res === "ok" ? "ok" : o.res === "pending" ? "" : "bad"}" title="${esc(o.hint || "")}">${esc(steps[i]?.label || "?")}${typeof o.off === "number" && o.off ? ` ${o.off > 0 ? "+" : ""}${o.off}` : ""}</span>`).join("")}</span>
+    <span class="grow"></span><span class="muted" style="font-size:12px">${new Date(a.time * 1000).toLocaleTimeString()}</span></div>`).join("");
+  box.innerHTML = html;
+  box.querySelectorAll(".hov2").forEach(el => { el.addEventListener("mousemove", e => showTip(e, esc(el.dataset.t))); el.addEventListener("mouseleave", hideTip); });
+}
+
+function renderTabs() {
+  $("tabProfile").classList.toggle("hidden", st.tab !== "profile");
+  $("tabTrain").classList.toggle("hidden", st.tab !== "train");
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.tab === st.tab));
+  if (st.tab === "profile") renderProfile(); else renderTrain();
+}
+
+/* ===================== polling ===================== */
+async function loadLibrary() {
+  if (!FS.ok) return;
+  const names = await FS.list("combos");
+  const out = {};
+  for (const n of names) { const r = await FS.read("combos/" + n); if (r && r.data && r.data.id) out[r.data.id] = r.data; }
+  st.combos = out;
+  renderLibrary();
+}
+
+async function pollData(force) {
+  if (!FS.ok) return;
+  const s = await FS.read("status.json");
+  if (s && (force || s.mtime !== st.statusMtime)) {
+    const first = !st.status;
+    st.statusMtime = s.mtime; st.status = s.data;
+    if (first) optionsToForm(s.data.options);
+    renderHeaderStatus(); renderLibrary(); renderBot();
+  } else if (st.status) renderHeaderStatus();
+  if (!st.sel) return;
+  let changed = false;
+  const p = await FS.read(`profiles/${st.sel}.json`);
+  if (p && (force || p.mtime !== st.profileMtime)) {
+    st.profileMtime = p.mtime;
+    const c = st.combos[st.sel];
+    st.profile = (p.data && c && p.data.combo_hash === c.hash) ? p.data : null;
+    changed = true;
+  } else if (!p && force) { st.profile = null; changed = true; }
+  const se = await FS.read(`sessions/${st.sel}.json`);
+  if (se && (force || se.mtime !== st.sessionMtime)) { st.sessionMtime = se.mtime; st.session = se.data; changed = true; }
+  else if (!se && force) { st.session = null; changed = true; }
+  if (changed) { renderTabs(); renderChips(); }
+}
+
+async function afterConnect() {
+  await loadLibrary();
+  const ids = Object.keys(st.combos);
+  await pollData(true);
+  if (!st.sel) {
+    const pick = (st.status && st.status.combo_id && st.combos[st.status.combo_id]) ? st.status.combo_id : ids[0];
+    if (pick) await selectCombo(pick);
+  }
+}
+
+
+/* ===================== training bot ===================== */
+function botOptions() {
+  return {reps: +$("botReps").value, position_override: $("botPos").value || undefined, spacing: +$("botSpacing").value,
+          sweet: $("botSweet").checked, reset: $("botReset").checked};
+}
+function botFighterIds() {
+  const fid = libFilter === "follow" || libFilter === "all" ? +$("fighter").value : +libFilter;
+  return Object.values(st.combos).filter(c => +c.fighter_id === fid && (c.control || "classic") === "classic")
+    .sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => c.id);
+}
+$("btnBotOne").onclick = async () => {
+  const c = await saveDraft(); if (!c) return;
+  await sendCommand({cmd: "bot_start", ids: [c.id], options: botOptions()});
+  $("botStatus").innerHTML = `<span class="muted">Sent. The bot starts as soon as the game is in Training mode.</span>`;
+};
+$("btnBotAll").onclick = async () => {
+  const ids = botFighterIds();
+  if (!ids.length) { $("botStatus").innerHTML = `<span class="error">No combos for this character yet.</span>`; return; }
+  if (!confirm(`Profile ${ids.length} combos for ${FIGHTERS[+$("fighter").value] || "this character"}? This can take a while; leave the game in Training mode.`)) return;
+  await sendCommand({cmd: "bot_start", ids, options: botOptions()});
+  $("botStatus").innerHTML = `<span class="muted">Sent ${ids.length} combos to the bot.</span>`;
+};
+$("btnBotStop").onclick = () => sendCommand({cmd: "bot_stop"});
+
+function fmtTime(sec) { sec = Math.max(0, Math.round(sec)); const m = Math.floor(sec / 60); return m ? `${m}m ${sec % 60}s` : `${sec}s`; }
+const PHASE = {A: "finding windows", B: "sweet-spot pass", C: "checking the full combo"};
+function renderBot() {
+  const b = st.status && st.status.bot;
+  const box = $("botStatus");
+  $("btnBotStop").disabled = !(b && b.running);
+  if (!b) return;
+  const res = arr(b.results);
+  let html = "";
+  if (b.running) {
+    const done = res.length;
+    const per = done ? b.elapsed / done : null;
+    const eta = per ? per * (b.queue_len - done) : null;
+    html += `<div style="font-size:14px"><b>Running</b>: combo ${b.queue_pos} of ${b.queue_len}, <b>${esc(b.combo_name || "")}</b></div>
+      <div class="ink2" style="font-size:13px">${esc(PHASE[b.phase] || "")}${b.step ? ` · step ${b.step} <span style="font-family:var(--mono)">${esc(b.step_label || "")}</span>` : ""}${b.d != null ? ` at +${b.d}f` : ""} · ${b.combo_attempts || 0} attempts on this combo · ${fmtTime(b.elapsed)} elapsed${eta != null ? ` · about ${fmtTime(eta)} left` : ""}${b.position ? ` · ${b.position}` : ""}</div>
+      <div class="botbar"><i style="width:${Math.round(100 * done / Math.max(1, b.queue_len))}%"></i></div>`;
+  } else if (b.stop_reason) {
+    html += `<div class="ink2" style="font-size:13px">Last run: ${esc(b.stop_reason)}${b.attempts ? ` · ${b.attempts} attempts in ${fmtTime(b.elapsed)}` : ""}</div>`;
+  }
+  if (res.length) {
+    html += res.slice().reverse().map(r => {
+      const ws = r.windows ? Object.entries(r.windows).map(([k, w]) => `${k}: ${w.E}–${w.L}`).join(" · ") : "";
+      return `<div class="botres"><b style="color:${r.ok ? "var(--good)" : "var(--critical)"}">${r.ok ? "✓" : "✕"}</b>
+        <span>${esc(r.name || r.id)}</span>
+        <span class="muted" style="font-size:12px">${r.ok ? `${r.clean}/${r.clean_of} clean at target timing · ${r.attempts} attempts · ${fmtTime(r.seconds || 0)}${ws ? " · windows " + ws : ""}` : esc(r.reason || "")}</span></div>`;
+    }).join("");
+  }
+  box.innerHTML = html;
+}
+
+/* ===================== wire up ===================== */
+fillFighters();
+st.draft = newDraft();
+st.draft.notation = "";
+loadDraftIntoForm();
+renderFolder();
+renderTabs();
+
+["fighter", "control", "name", "notation"].forEach(id => $(id).addEventListener("input", () => { readForm(); renderChips(); }));
+$("fighter").addEventListener("change", () => { if (libFilter === "follow") renderLibrary(); });
+$("libFilter").onchange = e => { libFilter = e.target.value; try { localStorage.setItem("combolab_libfilter", libFilter); } catch (er) {} renderLibrary(); };
+$("btnNew").onclick = () => { st.sel = null; st.draft = newDraft(); st.profile = null; st.session = null; loadDraftIntoForm(); renderLibrary(); renderTabs(); $("notation").focus(); };
+$("btnSave").onclick = saveDraft;
+$("impFighter").innerHTML = $("fighter").innerHTML;
+$("btnImport").onclick = () => { $("importCard").classList.remove("hidden"); $("impFighter").value = $("fighter").value; $("impText").focus(); };
+$("btnCancelImport").onclick = () => $("importCard").classList.add("hidden");
+$("btnDoImport").onclick = async () => {
+  if (!FS.ok) { $("impMsg").textContent = "Link the game folder (or open the page from the server) first."; return; }
+  const fid = +$("impFighter").value, control = $("impControl").value, fname = FIGHTERS[fid] || "";
+  let section = "", ok = 0; const bad = [];
+  const lines = $("impText").value.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (!line) continue;
+    if (line.startsWith("#")) { section = line.replace(/^#+\s*/, ""); continue; }
+    let name = "", notation = line;
+    const bar = line.indexOf("|");
+    if (bar >= 0) { name = line.slice(0, bar).trim(); notation = line.slice(bar + 1).trim(); }
+    const steps = parseCombo(notation, control).map(x => ({label: x.label, sep: x.sep, kind: x.kind, trigger: x.trigger, error: x.error}));
+    if (!steps.length || steps.some(x => x.error)) { bad.push(`line ${i + 1}: ${(steps.find(x => x.error) || {}).error || "empty"}`); continue; }
+    const clean = steps.map(({error, ...r}) => r);
+    const full = [section, name || notation].filter(Boolean).join(": ");
+    const id = slug(fname + "-" + full).slice(0, 60) + "-" + Math.random().toString(36).slice(2, 6);
+    const combo = {format: "combolab.combo/1", id, name: full, fighter_id: fid, fighter: fname, control, notation, version: 1, hash: hashSteps(clean), steps: clean, overrides: {}, updated: new Date().toISOString()};
+    await FS.write(`combos/${id}.json`, combo);
+    st.combos[id] = combo; ok++;
+  }
+  renderLibrary();
+  $("impMsg").innerHTML = `Imported ${ok} combo${ok === 1 ? "" : "s"}.` + (bad.length ? ` <span class="error">Skipped ${bad.length}: ${esc(bad.slice(0, 3).join("; "))}${bad.length > 3 ? "…" : ""}</span>` : "");
+  if (ok) sendCommand({cmd: "rescan"});
+};
+$("btnDevelop").onclick = async () => { const c = await saveDraft(); if (c) { await sendCommand({cmd: "load", combo_id: c.id, mode: "develop", options: optionsFromForm()}); $("saveMsg").textContent = "Sent to game: Develop. Jump into Training mode."; } };
+$("btnTrain").onclick = async () => { const c = await saveDraft(); if (c) { await sendCommand({cmd: "load", combo_id: c.id, mode: "train", options: optionsFromForm()}); $("saveMsg").textContent = "Sent to game: Train."; } };
+$("btnOptions").onclick = async () => { await sendCommand({cmd: "options", options: optionsFromForm()}); $("saveMsg").textContent = "Options sent to game."; };
+$("btnResetProfile").onclick = async () => { if (!st.sel) return; if (!confirm("Clear all timing samples for this combo?")) return; await sendCommand({cmd: "reset_profile", combo_id: st.sel}); setTimeout(() => pollData(true), 1200); };
+$("btnExport").onclick = () => {
+  readForm();
+  const d = st.draft; const {steps, hash} = buildCombo(d);
+  if (steps.some(s => s.error) || !steps.length) { renderChips(); return; }
+  const id = d.id || slug((FIGHTERS[d.fighter_id] || "x") + "-" + (d.name || "combo"));
+  const combo = {format: "combolab.combo/1", id, name: d.name || d.notation.slice(0, 40), fighter_id: d.fighter_id, fighter: FIGHTERS[d.fighter_id], control: d.control, notation: d.notation.trim(), version: d.version || 1, hash, steps: steps.map(s => ({label: s.label, sep: s.sep, kind: s.kind, trigger: s.trigger})), overrides: d.overrides};
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(combo, null, 1)], {type: "application/json"}));
+  a.download = id + ".json"; a.click();
+};
+$("btnDelete").onclick = async () => {
+  if (!st.sel || !FS.ok) return;
+  if (!confirm("Delete this combo file? Its profile and history stay in the folder.")) return;
+  try { await FS.remove(`combos/${st.sel}.json`); } catch (e) {}
+  delete st.combos[st.sel]; st.sel = null; st.draft = newDraft(); loadDraftIntoForm(); renderLibrary(); renderTabs();
+};
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => { st.tab = t.dataset.tab; renderTabs(); });
+
+(async () => {
+  if (FS.supported) {
+    const r = await FS.restore(false);
+    renderFolder();
+    if (r === "ok") await afterConnect();
+  }
+  setInterval(() => pollData(false), 1000);
+})();
+</script>
+</body>
+</html>

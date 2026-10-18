@@ -1,0 +1,55 @@
+{
+ "format": "combolab.combo/1",
+ "id": "ingrid-corner-b-hp-target-combo-corner",
+ "name": "Corner: b.HP target combo, corner",
+ "fighter_id": 32,
+ "fighter": "Ingrid",
+ "control": "classic",
+ "notation": "4HP~HP > 214MP, 236MK",
+ "version": 1,
+ "hash": "c6de877c",
+ "steps": [
+  {
+   "label": "4HP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "HP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214MP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236MK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "VesperArcade, Street Fighter 6 Ingrid Combo Guide (youtube.com/watch?v=1o4EPXASNwg)"
+}

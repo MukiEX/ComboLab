@@ -1,0 +1,45 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-fuhajin-enders-go-ohsatsu-into-sa3",
+ "name": "Fuhajin enders: Go Ohsatsu into SA3",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "5HP > 236HK > 214214K",
+ "version": 1,
+ "hash": "af661d1e",
+ "steps": [
+  {
+   "label": "5HP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214214K",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 896,
+    "mode": "any"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

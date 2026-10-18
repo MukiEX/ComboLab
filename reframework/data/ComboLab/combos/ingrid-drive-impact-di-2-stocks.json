@@ -1,0 +1,75 @@
+{
+ "format": "combolab.combo/1",
+ "id": "ingrid-drive-impact-di-2-stocks",
+ "name": "Drive Impact: DI, 2 stocks",
+ "fighter_id": 32,
+ "fighter": "Ingrid",
+ "control": "classic",
+ "notation": "DI, 4HP~HP > 214HP, 6KKK, 236MK",
+ "version": 1,
+ "hash": "4d4adb69",
+ "steps": [
+  {
+   "label": "DI",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 576,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "4HP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "HP",
+   "sep": "~",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "6KKK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 896,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236MK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "VesperArcade, Street Fighter 6 Ingrid Combo Guide (youtube.com/watch?v=1o4EPXASNwg)"
+}

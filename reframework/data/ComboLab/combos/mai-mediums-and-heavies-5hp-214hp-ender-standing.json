@@ -1,0 +1,45 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-mediums-and-heavies-5hp-214hp-ender-standing",
+ "name": "Mediums and heavies: 5HP 214HP ender (standing)",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "5HP > 214HP, 236LK",
+ "version": 1,
+ "hash": "f778803",
+ "steps": [
+  {
+   "label": "5HP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214HP",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 64,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236LK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

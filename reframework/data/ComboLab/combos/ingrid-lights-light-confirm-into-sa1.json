@@ -1,0 +1,55 @@
+{
+ "format": "combolab.combo/1",
+ "id": "ingrid-lights-light-confirm-into-sa1",
+ "name": "Lights: Light confirm into SA1",
+ "fighter_id": 32,
+ "fighter": "Ingrid",
+ "control": "classic",
+ "notation": "2LK, 2LP, 2LP > SA1",
+ "version": 1,
+ "hash": "601f5d02",
+ "steps": [
+  {
+   "label": "2LK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 128,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "SA1",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 1008,
+    "mode": "any"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "VesperArcade, Street Fighter 6 Ingrid Combo Guide (youtube.com/watch?v=1o4EPXASNwg)"
+}

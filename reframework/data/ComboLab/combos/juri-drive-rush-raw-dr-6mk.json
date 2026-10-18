@@ -1,0 +1,65 @@
+{
+ "format": "combolab.combo/1",
+ "id": "juri-drive-rush-raw-dr-6mk",
+ "name": "Drive Rush: Raw DR 6MK",
+ "fighter_id": 16,
+ "fighter": "Juri",
+ "control": "classic",
+ "notation": "DR > 6MK, 5MP, 2MP > 214MK",
+ "version": 1,
+ "hash": "eeed991e",
+ "steps": [
+  {
+   "label": "DR",
+   "sep": "start",
+   "kind": "move",
+   "trigger": {
+    "type": "button",
+    "mask": 288,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "6MK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5MP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2MP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214MK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Juri/Combos (pasted by user)"
+}

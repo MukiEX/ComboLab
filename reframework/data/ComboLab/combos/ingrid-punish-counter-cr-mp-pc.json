@@ -1,0 +1,45 @@
+{
+ "format": "combolab.combo/1",
+ "id": "ingrid-punish-counter-cr-mp-pc",
+ "name": "Punish Counter: cr.MP PC",
+ "fighter_id": 32,
+ "fighter": "Ingrid",
+ "control": "classic",
+ "notation": "2MP, 5MK > 236MK",
+ "version": 1,
+ "hash": "63bed9a6",
+ "steps": [
+  {
+   "label": "2MP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "5MK",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236MK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 256,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "VesperArcade, Street Fighter 6 Ingrid Combo Guide (youtube.com/watch?v=1o4EPXASNwg)"
+}

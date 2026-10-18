@@ -1,0 +1,35 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-punish-counter-pc-2lp-far",
+ "name": "Punish counter: PC 2LP far",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "2LP, 214MP",
+ "version": 1,
+ "hash": "6a8a0e01",
+ "steps": [
+  {
+   "label": "2LP",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "214MP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 32,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}

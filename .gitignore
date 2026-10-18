@@ -1,0 +1,9 @@
+# written by the mod / web page at runtime
+reframework/data/ComboLab/profiles/
+reframework/data/ComboLab/sessions/
+reframework/data/ComboLab/bot/
+reframework/data/ComboLab/status.json
+reframework/data/ComboLab/command.json
+reframework/data/ComboLab/config.json
+__pycache__/
+*.pyc

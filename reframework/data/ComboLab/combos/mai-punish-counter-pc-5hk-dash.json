@@ -1,0 +1,55 @@
+{
+ "format": "combolab.combo/1",
+ "id": "mai-punish-counter-pc-5hk-dash",
+ "name": "Punish counter: PC 5HK dash",
+ "fighter_id": 28,
+ "fighter": "Mai",
+ "control": "classic",
+ "notation": "5HK, 66, 2LP > 236HK",
+ "version": 1,
+ "hash": "b186bac6",
+ "steps": [
+  {
+   "label": "5HK",
+   "sep": "start",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "66",
+   "sep": ",",
+   "kind": "move",
+   "trigger": {
+    "type": "dash",
+    "mask": 0,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "2LP",
+   "sep": ",",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 16,
+    "mode": "all"
+   }
+  },
+  {
+   "label": "236HK",
+   "sep": ">",
+   "kind": "hit",
+   "trigger": {
+    "type": "button",
+    "mask": 512,
+    "mode": "all"
+   }
+  }
+ ],
+ "overrides": {},
+ "source": "SuperCombo Wiki, Street Fighter 6/Mai/Combos (pasted by user)"
+}
