@@ -422,6 +422,7 @@ function Overlay.song_update(S, live, now)
         end
         song.fixed = {}
         for k = 1, N do song.fixed[k] = song.T[k] end
+        song.got = {}
     end
     -- follow my hits: re-time the notes still ahead from the real anchor
     if cfg.song_follow and live and live.anchor and live.c and live.c >= 2 and live.c <= N and not live.failed then
@@ -431,6 +432,32 @@ function Overlay.song_update(S, live, now)
             local wj, wp = P:window(j), P:window(j - 1)
             song.T[j] = song.T[j - 1] + (wp.dq or 1) + wj.mid
         end
+    end
+    -- restart when the first note goes by untouched, or two notes in a row do
+    if live and live.steps then
+        for j, o in pairs(live.steps) do if o.res == "ok" then song.got[j] = true end end
+    end
+    local streak, why = 0, nil
+    for j = 1, N do
+        local slack = 6
+        if j >= 2 then
+            local w = P:window(j)
+            slack = slack + math.max(0, (w.L or w.mid) - w.mid)
+        end
+        if now <= song.T[j] + slack then break end
+        if song.got[j] then
+            streak = 0
+        else
+            streak = streak + 1
+            if j == 1 then why = "missed the first hit" break end
+            if streak >= 2 then why = "missed two notes in a row" break end
+        end
+    end
+    if why then
+        S.song_flash = { t = os.clock(), text = why .. ": restarting" }
+        if live and S.tracker then S.tracker.att = nil; S.tracker._live = nil end
+        S.song = nil
+        return
     end
     -- count-in text: 3, 2, 1 on the beats before step 1
     local beat = math.floor((now - song.t0) / song.B)
@@ -495,21 +522,13 @@ local function ring_dots(cx, cy, r, a0, a1, col, dot, n)
     end
 end
 
-function Overlay.notes(S, W, H, sc, top)
-    cur_palette = PALETTES[S.cfg.note_palette or "classic"] or PALETTES.classic
-    local P, combo = S.profile, S.combo
-    local steps = combo.steps
-    local N = #steps
-    local cfg = S.cfg
-    local A = cfg.note_approach or 36               -- frames of flight
-    local R = 34 * sc                               -- target ring radius
-    local cx, cy = W / 2, top + R + 6 * sc
-    local labels = {}
-    local live = S.tracker:live_detail()
-    local now = S.tracker:now() or 0
-    local fnow = now + math.max(0, math.min(1, (os.clock() - (S.tick_clock or os.clock())) * 60))
+-- Shared by the note views: logs a judgement for each finished step of the
+-- attempt in progress (or the last one), and returns the target frame of every
+-- upcoming step (T), the first step that gets a note, and the flight time.
+function Overlay.timeline(S, live, fnow)
+    local P, cfg = S.profile, S.cfg
+    local N = #S.combo.steps
     local clock = os.clock()
-
     -- judgements from the attempt in progress (or the last one)
     local shown = live or S.last
     local key = live and ("L" .. tostring(live.anchor or 0) .. tostring(S.attempt_seq or 0)) or ("R" .. tostring(S.attempt_seq or 0))
@@ -538,6 +557,7 @@ function Overlay.notes(S, W, H, sc, top)
     end
 
     -- hit times
+    local A = cfg.note_approach or 36
     local T = {}
     local first = 2
     local c = live and live.c or nil
@@ -560,6 +580,28 @@ function Overlay.notes(S, W, H, sc, top)
             end
         end
     end
+
+    return T, first, A
+end
+
+function Overlay.notes(S, W, H, sc, top)
+    cur_palette = PALETTES[S.cfg.note_palette or "classic"] or PALETTES.classic
+    local P, combo = S.profile, S.combo
+    local steps = combo.steps
+    local N = #steps
+    local cfg = S.cfg
+    local A = cfg.note_approach or 36               -- frames of flight
+    local R = 34 * sc                               -- target ring radius
+    local cx, cy = W / 2, top + R + 6 * sc
+    local labels = {}
+    local live = S.tracker:live_detail()
+    local now = S.tracker:now() or 0
+    local fnow = now + math.max(0, math.min(1, (os.clock() - (S.tick_clock or os.clock())) * 60))
+    local clock = os.clock()
+
+    local T, first, A2 = Overlay.timeline(S, live, fnow)
+    A = A2 or A
+    local c = live and live.c or nil
 
     -- target ring
     local nxt = nil
@@ -679,6 +721,219 @@ function Overlay.notes(S, W, H, sc, top)
 end
 
 -- --------------------------------------------------------------------------
+-- "Strike Fixation" view (Train): a DDR-style chart. Lanes are
+--   [ motion ] [ light ] [ medium ] [ heavy ]
+-- and every step is a row of notes rising to the receptors at the top, landing
+-- on its target frame. Punch / kick shows on the note (P, K, PK); a button of
+-- any strength spans all three lanes. A faint band around each row is the
+-- step's press window.
+-- --------------------------------------------------------------------------
+local LANES = { "L", "M", "H" }
+
+-- what a step asks for, lane by lane
+function Overlay.fix_lanes(label)
+    label = tostring(label or "")
+    label = label:match("[^~]+$") or label        -- "236K~K": the follow-up is what you press next
+    local up = label:upper()
+    local r = { parts = nil, mtext = nil, L = nil, M = nil, H = nil, any = nil }
+    if up == "DR" then r.mtext, r.M = "DR", "PK" return r end
+    if up == "DI" then r.mtext, r.H = "DI", "PK" return r end
+    if up == "PARRY" then r.mtext, r.M = "PARRY", "PK" return r end
+    if up == "THROW" then r.mtext, r.L = "THROW", "PK" return r end
+    if up:find("^SA") or up:find("^CA") or up:find("^LVL") then r.mtext = up return r end
+    local parts = Motion.parse(label)
+    -- the button text is the last text part; everything before it goes in the motion lane
+    local btn, bi = nil, nil
+    for i = #parts, 1, -1 do
+        if parts[i].t == "text" and parts[i].s ~= "]" and parts[i].s ~= "~" then btn, bi = parts[i].s, i break end
+    end
+    if btn and btn:upper():find("^J%.") then btn, bi = nil, nil end
+    local m = {}
+    for i, p in ipairs(parts) do if i ~= bi then m[#m + 1] = p end end
+    if #m > 0 then r.parts = m end
+    local s = (btn or ""):upper():gsub("[%[%]%+%s]", "")
+    local function add(lane, v) r[lane] = (r[lane] and r[lane] ~= v and not r[lane]:find(v)) and (r[lane] .. v) or (r[lane] or v) end
+    while #s > 0 do
+        local two = s:sub(1, 2)
+        if two:match("^[LMH][PK]$") then add(two:sub(1, 1), two:sub(2)); s = s:sub(3)
+        elseif s:sub(1, 3) == "PPP" or s:sub(1, 3) == "KKK" then for _, l in ipairs(LANES) do add(l, s:sub(1, 1)) end; s = s:sub(4)
+        elseif two == "PP" or two == "KK" then r.any = (r.any or "") .. two; s = s:sub(3)
+        elseif s:sub(1, 2) == "SP" then r.mtext = (r.mtext or "") .. "SP"; s = s:sub(3)
+        elseif s:sub(1, 4) == "AUTO" then r.any = (r.any or "") .. "AUTO"; s = s:sub(5)
+        elseif s:sub(1, 1) == "P" or s:sub(1, 1) == "K" then r.any = (r.any or "") .. s:sub(1, 1); s = s:sub(2)
+        elseif s:sub(1, 1):match("[LMH]") then add(s:sub(1, 1), "•"); s = s:sub(2)          -- Modern L / M / H
+        else break end
+    end
+    return r
+end
+
+local function lane_color(l) return cur_palette[l] or NOTE.X end
+
+function Overlay.fixation(S, W, H, sc, top)
+    cur_palette = PALETTES[S.cfg.note_palette or "classic"] or PALETTES.classic
+    local P, combo, cfg = S.profile, S.combo, S.cfg
+    local steps = combo.steps
+    local N = #steps
+    local labels = {}
+    local live = S.tracker:live_detail()
+    local now = S.tracker:now() or 0
+    local fnow = now + math.max(0, math.min(1, (os.clock() - (S.tick_clock or os.clock())) * 60))
+    local clock = os.clock()
+    local T, first, A = Overlay.timeline(S, live, fnow)
+
+    -- geometry
+    local u = 64 * sc
+    local gap = 6 * sc
+    local mw = u * 1.9                                  -- motion lane is wider (236236 needs room)
+    local pw = mw + 3 * u + 4 * gap
+    local px = (cfg.fix_pos == "left" and W * 0.05) or (cfg.fix_pos == "right" and (W * 0.95 - pw)) or (W - pw) / 2
+    local ph = math.min(H * 0.55, 560 * sc)
+    local ry = top + u * 0.55                           -- receptor centre line
+    local speed = (ph - u * 0.6) / math.max(10, A)      -- pixels per frame
+    local lane_x = { motion = px + gap }
+    lane_x.L = lane_x.motion + mw + gap
+    lane_x.M = lane_x.L + u + gap
+    lane_x.H = lane_x.M + u + gap
+    local function y_of(t) return ry + (t - fnow) * speed end
+
+    -- lanes
+    draw.filled_rect(px, top, pw, ph, rgba(6, 8, 14, 195))
+    draw.filled_rect(lane_x.motion, top, mw, ph, rgba(255, 255, 255, 10))
+    for _, l in ipairs(LANES) do draw.filled_rect(lane_x[l], top, u, ph, with_alpha(lane_color(l), 0.06)) end
+
+    -- beat lines (song mode) for a DDR feel
+    if S.song then
+        local B = S.song.B
+        local k0 = math.ceil((fnow - S.song.t0) / B)
+        for k = k0, k0 + math.ceil(A / B) + 1 do
+            local y = y_of(S.song.t0 + k * B)
+            if y > top and y < top + ph then draw.filled_rect(px, y, pw, math.max(1, 1.5 * sc), rgba(255, 255, 255, 28)) end
+        end
+    end
+
+    -- which step is next, and which lanes just got judged (receptor flash)
+    local nxt
+    for j = first, N do if T[j] and T[j] > fnow - 6 then nxt = j break end end
+    local jl = judge_log._last
+    local flash = (jl and clock - jl.t < 0.25) and (1 - (clock - jl.t) / 0.25) or 0
+    local flash_lanes = (flash > 0 and jl.k and steps[jl.k]) and Overlay.fix_lanes(steps[jl.k].label) or nil
+
+    -- receptors
+    local rr = u * 0.36
+    local function receptor(l, cx)
+        local col = lane_color(l)
+        local lit = flash_lanes and (flash_lanes[l] or flash_lanes.any)
+        if lit then draw.filled_circle(cx, ry, rr + 8 * sc * flash, with_alpha(jl.col, 0.5 * flash), 32) end
+        draw.outline_circle(cx, ry, rr, with_alpha(col, 0.9), 32)
+        draw.outline_circle(cx, ry, rr - 3 * sc, with_alpha(col, 0.45), 32)
+        labels[#labels + 1] = { x = cx, y = ry, text = l, col = with_alpha(col, 0.55), size = 18 }
+    end
+    for _, l in ipairs(LANES) do receptor(l, lane_x[l] + u / 2) end
+    do
+        local cx = lane_x.motion + mw / 2
+        local lit = flash_lanes and (flash_lanes.parts or flash_lanes.mtext)
+        if lit then draw.filled_rect(lane_x.motion, ry - rr - 6 * sc * flash, mw, 2 * rr + 12 * sc * flash, with_alpha(jl.col, 0.35 * flash)) end
+        draw.outline_rect(lane_x.motion + 4 * sc, ry - rr, mw - 8 * sc, 2 * rr, rgba(255, 255, 255, 120))
+        labels[#labels + 1] = { x = cx, y = ry, text = "MOTION", col = rgba(255, 255, 255, 70), size = 18 }
+    end
+
+    -- notes, latest first so the next one draws on top
+    local gh = u * 0.62
+    for j = N, first, -1 do
+        local Tj = T[j]
+        if Tj then
+            local y = y_of(Tj)
+            local passed = y < ry
+            local fade = passed and math.max(0, 1 - (ry - y) / (u * 0.8)) or 1
+            if y < top + ph + u * 0.5 and fade > 0 then
+                local cur = (j == nxt)
+                local bright = (cur and 1 or 0.6) * fade
+                local need = Overlay.fix_lanes(steps[j].label)
+                -- press window band
+                local w = j >= 2 and P:window(j) or nil
+                if w and not passed and y - ry > u * 0.5 then
+                    -- thin bracket at the panel edges rather than a full-width band
+                    local y0, y1 = y_of(Tj - (w.mid - w.E)), y_of(Tj + (w.L - w.mid))
+                    local a = cur and 200 or 90
+                    draw.filled_rect(px, y0, 4 * sc, math.max(2, y1 - y0), rgba(0, 235, 245, a))
+                    draw.filled_rect(px + pw - 4 * sc, y0, 4 * sc, math.max(2, y1 - y0), rgba(0, 235, 245, a))
+                    draw.filled_rect(px + 4 * sc, y0, pw - 8 * sc, math.max(2, y1 - y0), rgba(0, 235, 245, cur and 22 or 10))
+                end
+                -- button lanes
+                local gr = u * 0.36
+                for _, l in ipairs(LANES) do
+                    if need[l] then
+                        local cx = lane_x[l] + u / 2
+                        local col = lane_color(l)
+                        if cur then draw.filled_circle(cx, y, gr + 5 * sc, with_alpha(col, 0.25 * fade), 28) end
+                        draw.filled_circle(cx, y, gr, with_alpha(rgba(12, 14, 22), 0.9 * fade), 28)
+                        draw.filled_circle(cx, y, gr - 4 * sc, with_alpha(col, 0.85 * bright), 28)
+                        draw.outline_circle(cx, y, gr, with_alpha(rgba(255, 255, 255), 0.7 * bright), 28)
+                        labels[#labels + 1] = { x = cx, y = y, text = need[l], col = with_alpha(rgba(10, 10, 14), fade), size = 24, dark = true }
+                    end
+                end
+                if need.any then
+                    -- any strength: one bar across all three lanes
+                    local x0, x1 = lane_x.L + u * 0.18, lane_x.H + u * 0.82
+                    local col = NOTE.SP
+                    draw.filled_rect(x0, y - gr * 0.7, x1 - x0, gr * 1.4, with_alpha(col, 0.8 * bright))
+                    draw.filled_circle(x0, y, gr * 0.7, with_alpha(col, 0.8 * bright), 20)
+                    draw.filled_circle(x1, y, gr * 0.7, with_alpha(col, 0.8 * bright), 20)
+                    labels[#labels + 1] = { x = (x0 + x1) / 2, y = y, text = need.any, col = with_alpha(rgba(10, 10, 14), fade), size = 24, dark = true }
+                end
+                -- motion lane
+                local mx = lane_x.motion
+                local mcol = with_alpha(rgba(255, 255, 255), bright)
+                if need.parts or need.mtext then
+                    draw.filled_rect(mx + 6 * sc, y - gr, mw - 12 * sc, 2 * gr, with_alpha(rgba(20, 24, 36), 0.9 * fade))
+                    draw.outline_rect(mx + 6 * sc, y - gr, mw - 12 * sc, 2 * gr, with_alpha(cur and C.yellow or rgba(255, 255, 255), 0.6 * bright))
+                end
+                if need.parts then
+                    -- lay out glyphs (draw layer) and text bits like "j." or "[ ]" (imgui layer)
+                    local f = font(24 * sc)
+                    local items, total = {}, 0
+                    for _, p in ipairs(need.parts) do
+                        local it
+                        if p.t == "text" then it = { t = "text", s = p.s, w = measure(p.s, f) }
+                        else local g = glyph_of(p); it = { t = "glyph", g = g, w = gh * g.aspect + gh * 0.16 } end
+                        items[#items + 1] = it; total = total + it.w
+                    end
+                    local scale = math.min(1, (mw - 20 * sc) / math.max(1, total))
+                    local x = mx + mw / 2 - total * scale / 2
+                    for _, it in ipairs(items) do
+                        if it.t == "glyph" then
+                            local h = gh * scale
+                            draw_glyph(it.g, x + h * 0.08, y - h / 2, h, mcol)
+                        else
+                            labels[#labels + 1] = { x = x + it.w * scale / 2, y = y, text = it.s, col = mcol, size = 24 }
+                        end
+                        x = x + it.w * scale
+                    end
+                elseif need.mtext then
+                    labels[#labels + 1] = { x = mx + mw / 2, y = y, text = need.mtext, col = with_alpha(NOTE.DR, bright), size = 24 }
+                end
+            end
+        end
+    end
+
+    -- judgement and combo counter, DDR style
+    if jl and clock - jl.t < 0.8 then
+        local a = 1 - (clock - jl.t) / 0.8
+        labels[#labels + 1] = { x = px + pw / 2, y = ry + u * 1.15, text = jl.text, col = with_alpha(jl.col, a), size = 32 }
+    end
+    if live and live.c and live.c > 2 and not live.failed then
+        labels[#labels + 1] = { x = px + pw / 2, y = ry + u * 2.0, text = tostring(live.c - 1) .. " combo", col = rgba(120, 200, 255, 220), size = 32 }
+    end
+    if S.song and S.song.count then
+        local pulse = 1 - (S.song.beat_phase or 0)
+        labels[#labels + 1] = { x = px + pw / 2, y = top + ph * 0.55, text = S.song.count, col = with_alpha(C.yellow, 0.5 + 0.5 * pulse), size = 40 }
+    elseif not live and not S.song then
+        labels[#labels + 1] = { x = px + pw / 2, y = top + ph * 0.55, text = "start when ready", col = C.dim, size = 18 }
+    end
+    return labels, top + ph + 12 * sc
+end
+
+-- --------------------------------------------------------------------------
 -- main draw (called from re.on_frame)
 -- S = { mode, combo, profile, tracker, last, stats, cfg, msg }
 -- --------------------------------------------------------------------------
@@ -703,13 +958,18 @@ function Overlay.draw(S)
     local seg_rects = {}
     local view = cfg.train_view or "bar"
     local notes_on = S.mode == "train" and (view == "notes" or view == "both") and N >= 2 and S.profile ~= nil
-    local bar_on = not (notes_on and view == "notes")
+    local fix_on = S.mode == "train" and view == "fix" and N >= 2 and S.profile ~= nil
+    local bar_on = not ((notes_on and view == "notes") or fix_on)
     local note_labels, notes_bottom = nil, nil
     -- note view layout: [bar] / notation line / ring / result
     local notes_ny = nil
     if notes_on then
         notes_ny = bar_on and (by + bh + 34 * sc) or by
         note_labels, notes_bottom = Overlay.notes(S, W, H, sc, notes_ny + 56 * sc)
+    elseif fix_on then
+        -- notation line, then the result line, then the lanes
+        notes_ny = by
+        note_labels = Overlay.fixation(S, W, H, sc, by + 110 * sc)
     end
     if N >= 2 and bar_on then
         local gap = 6 * sc
@@ -829,7 +1089,7 @@ function Overlay.draw(S)
     local f_note = font(24 * sc)
     if note_labels then
         for _, l in ipairs(note_labels) do
-            l.f = (l.big or l.judge) and f_mid or (l.note and f_note or f_sm)
+            l.f = l.size and font(l.size * sc) or ((l.big or l.judge) and f_mid or (l.note and f_note or f_sm))
             l.items, l.w = rich(l.text, l.f, arrows and l.step)
             local _, th = measure("Ag", l.f)
             l.th = th
@@ -874,9 +1134,13 @@ function Overlay.draw(S)
             text_at(bx + bw - tw, by - 26 * sc, nm, C.dim, f_sm)
         end
 
-        if S.song and S.song.count and not notes_on then
+        if S.song and S.song.count and not notes_on and not fix_on then
             local tw = measure(S.song.count, f_big)
             text_at(W / 2 - tw / 2, by - 64 * sc, S.song.count, C.yellow, f_big)
+        end
+        if S.song_flash and os.clock() - S.song_flash.t < 1.5 then
+            local tw = measure(S.song_flash.text, f_mid)
+            text_at(W / 2 - tw / 2, by - 64 * sc, S.song_flash.text, C.orange, f_mid)
         end
         if S.song_hint and not live then
             local tw = measure(S.song_hint, f_sm)

@@ -225,7 +225,8 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
       <div class="row" style="margin-top:12px;gap:22px">
         <label class="f">Overlay scale <input type="range" id="optScale" min="0.5" max="2" step="0.05" value="1"></label>
         <label class="f">Overlay height <input type="range" id="optY" min="0.02" max="0.9" step="0.005" value="0.25"></label>
-        <label class="f">Train view <select id="optView"><option value="bar">Bar</option><option value="notes">Spearmint Twintails (notes)</option><option value="both">Bar + notes</option></select></label>
+        <label class="f">Train view <select id="optView"><option value="bar">Bar</option><option value="notes">Spearmint Twintails (notes)</option><option value="both">Bar + notes</option><option value="fix">Strike Fixation (lanes)</option></select></label>
+        <label class="f">Strike Fixation lanes <select id="optFixPos"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></label>
         <label class="f">Note flight <input type="range" id="optApproach" min="18" max="72" step="2" value="36"></label>
         <label class="f">Note colours <select id="optPalette"><option value="classic">Classic (red / white / blue)</option><option value="sf6">SF6 (blue / yellow / red)</option></select></label>
         <label class="switch"><input type="checkbox" id="optFlip"> Kicks from the left</label>
@@ -398,7 +399,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.9.0";
+const PAGE_VERSION = "1.10.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -860,7 +861,7 @@ function optionsFromForm() {
     ignore_spam_samples: $("optIgnoreSpam").checked, user_side: $("optP2").checked ? 1 : 0,
     scale: +$("optScale").value, y: +$("optY").value,
     rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked, predict: $("optPredict").checked,
-    train_view: $("optView").value, note_approach: +$("optApproach").value, note_flip: $("optFlip").checked, note_palette: $("optPalette").value,
+    train_view: $("optView").value, note_approach: +$("optApproach").value, note_flip: $("optFlip").checked, note_palette: $("optPalette").value, fix_pos: $("optFixPos").value,
     motion_arrows: $("optArrows").checked,
     song_mode: $("optSong").checked, song_follow: $("optFollow").checked, song_approach: +$("optSongApproach").value, song_beat: +$("optSongBeat").value,
   };
@@ -877,6 +878,7 @@ function optionsToForm(o) {
   $("optFlip").checked = !!o.note_flip;
   if (o.motion_arrows != null && $("optArrows").checked !== !!o.motion_arrows) { $("optArrows").checked = !!o.motion_arrows; try { renderChips(); renderTabs(); } catch (e) {} }
   if (o.note_palette) $("optPalette").value = o.note_palette;
+  if (o.fix_pos) $("optFixPos").value = o.fix_pos;
   $("optSong").checked = !!o.song_mode; $("optFollow").checked = !!o.song_follow;
   if (o.song_approach) $("optSongApproach").value = o.song_approach;
   if (o.song_beat) $("optSongBeat").value = o.song_beat;
