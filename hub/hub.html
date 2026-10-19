@@ -124,6 +124,7 @@ pre.box { background: var(--surface-2); border: 1px solid var(--ring); border-ra
       <div class="grid2" style="margin-top:16px">
         <section class="card">
           <h2>Sync machines</h2>
+          <div id="mreqBox" hidden><h3 style="font-size:13px;margin:0 0 6px">Asking to join</h3><div class="scroll"><table id="mreqs"></table></div><div style="height:12px"></div></div>
           <div class="scroll"><table id="amachines"></table></div>
           <form id="addMachineForm" class="row" style="margin-top:12px">
             <input type="text" id="amName" placeholder="new machine name" maxlength="60">
@@ -292,6 +293,15 @@ function renderAdmin(st) {
     const m = st.machines[+b.dataset.i];
     if (!confirm(`Remove ${m.name}? It stops syncing; its samples stay in the profiles.`)) return;
     try { renderAdmin(await api("api/v1/admin/machines", {action: "remove", name: m.name}, true)); say("machineMsg", "Removed " + m.name, "ok"); }
+    catch (e) { say("machineMsg", e.message, "err"); }
+  });
+  $("mreqBox").hidden = !st.machine_requests.length;
+  $("mreqs").innerHTML = `<tr><th>Name</th><th>From</th><th>When</th><th></th></tr>` + st.machine_requests.map((m, i) =>
+    `<tr><td>${esc(m.name)}</td><td class="muted">${esc(m.addr || "")}</td><td class="muted">${ago(m.requested)}</td>
+     <td class="row"><button class="btn primary" data-act="approve" data-i="${i}">Approve</button><button class="btn danger" data-act="reject" data-i="${i}">Reject</button></td></tr>`).join("");
+  $("mreqs").querySelectorAll("button").forEach(b => b.onclick = async () => {
+    const m = st.machine_requests[+b.dataset.i];
+    try { renderAdmin(await api("api/v1/admin/machines", {action: b.dataset.act, name: m.name}, true)); say("machineMsg", (b.dataset.act === "approve" ? "Approved " : "Rejected ") + m.name + ".", "ok"); }
     catch (e) { say("machineMsg", e.message, "err"); }
   });
   if (st.new_token) {

@@ -44,6 +44,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--ring); position: sticky; top: 0; background: var(--page); z-index: 5; flex-wrap: wrap; }
 header h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
 header h1 span { color: var(--muted); font-weight: 400; }
+[hidden] { display: none !important; }
+.pagenav { display: flex; gap: 4px; }
+.pagenav button { background: none; border: none; padding: 5px 11px; border-radius: 7px; cursor: pointer; color: var(--ink-2); }
+.pagenav button.on { background: var(--surface-2); color: var(--ink); }
+#mainHub { display: block; max-width: 820px; }
+#mainHub .card + .card { margin-top: 16px; }
+.hubstate { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.hubstate .big { font-size: 16px; font-weight: 600; }
 .pills { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: 12.5px; border: 1px solid var(--ring); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
@@ -128,6 +136,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
 <body>
 <header>
   <h1>ComboLab <span>SF6 combo timing</span></h1>
+  <nav class="pagenav"><button data-page="trainer" class="on">Trainer</button><button data-page="hub">Hub</button></nav>
   <div class="pills">
     <span class="pill" id="pillFolder"><span class="dot"></span><span>No folder</span></span>
     <span class="pill" id="pillGame"><span class="dot"></span><span>Game: unknown</span></span>
@@ -136,7 +145,11 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
   </div>
 </header>
 
-<main>
+<main id="mainHub" hidden>
+  <section class="card" id="hubCard"></section>
+  <section class="card" id="hubConnect"></section>
+</main>
+<main id="mainTrainer">
   <aside>
     <section class="card">
       <h2>Data folder</h2>
@@ -399,7 +412,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.10.2";
+const PAGE_VERSION = "1.11.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -607,6 +620,12 @@ if (SERVER) {
       if (!this.ok) return null;
       try { const r = await api("/api/file?path=" + encodeURIComponent(path)); return r.ok ? await r.json() : null; } catch (e) { return null; }
     },
+    async hub(body) {
+      const r = await api("/api/hub", body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {});
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ("server error " + r.status));
+      return d;
+    },
     async write(path, obj) {
       const r = await api("/api/file?path=" + encodeURIComponent(path), {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(obj)});
       if (!r.ok) throw new Error("write failed: " + r.status);
@@ -736,8 +755,8 @@ function renderHubStatus(h) {
   const stale = age > 180;
   const host = String(h.hub).replace(/^https?:\/\//, "");
   const when = age < 90 ? "just now" : age < 5400 ? Math.round(age / 60) + " min ago" : Math.round(age / 3600) + " h ago";
-  const dot = h.ok && !stale ? "on" : (h.ok ? "warn" : "off");
-  const txt = h.ok ? (stale ? `Hub: last sync ${when}` : `Hub: synced ${when}`) : "Hub: can't sync";
+  const dot = h.pending ? "warn" : h.ok && !stale ? "on" : (h.ok ? "warn" : "off");
+  const txt = h.pending ? "Hub: waiting for approval" : h.ok ? (stale ? `Hub: last sync ${when}` : `Hub: synced ${when}`) : "Hub: can't sync";
   el.title = (h.error ? h.error + "\n" : "") + `${host}${h.machine ? " as " + h.machine : ""}` + (stale ? "\nIs run_server.bat (or run_sync.bat) running?" : "");
   el.innerHTML = `<span class="dot ${dot}"></span><span>${esc(txt)}</span>`;
 }
@@ -1253,6 +1272,84 @@ $("btnDelete").onclick = async () => {
   delete st.combos[st.sel]; st.sel = null; st.draft = newDraft(); loadDraftIntoForm(); renderLibrary(); renderTabs();
 };
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => { st.tab = t.dataset.tab; renderTabs(); });
+
+// ---------------------------------------------------------------- Hub page (sync this PC with a ComboLab hub)
+let hubPage = false, hubTimer = null, hubShowConnect = false;
+document.querySelectorAll(".pagenav button").forEach(b => b.onclick = () => {
+  hubPage = b.dataset.page === "hub";
+  document.querySelectorAll(".pagenav button").forEach(x => x.classList.toggle("on", x === b));
+  $("mainHub").hidden = !hubPage; $("mainTrainer").hidden = hubPage;
+  clearInterval(hubTimer);
+  if (hubPage) { renderHubPage(); hubTimer = setInterval(() => { if (!document.hidden) renderHubPage(true); }, 5000); }
+});
+$("pillHub").style.cursor = "pointer";
+$("pillHub").onclick = () => document.querySelector('.pagenav button[data-page="hub"]').click();
+const cleanName = s => String(s || "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+const agoS = t => { if (!t) return "never"; const s = Math.max(0, Date.now() / 1000 - t); return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago" : Math.round(s / 3600) + " h ago"; };
+async function renderHubPage(quiet) {
+  const card = $("hubCard"), con = $("hubConnect");
+  if (!FS.server) {
+    card.innerHTML = `<h2>Hub</h2><p>Hub sync runs inside the ComboLab server. Start <span class="m">run_server.bat</span> in <span class="m">reframework\\data\\ComboLab</span> and open <span class="m">http://localhost:8765</span>, then come back to this tab.</p>`;
+    con.hidden = true; return;
+  }
+  let h;
+  try { h = await FS.hub(); } catch (e) { card.innerHTML = `<h2>Hub</h2><p class="muted">${esc(e.message)}</p>`; return; }
+  const s = h.status || {};
+  if (quiet && document.activeElement && card.contains(document.activeElement)) return;     // don't clobber typing
+  if (h.configured) {
+    const dot = s.pending ? "warn" : s.ok ? "on" : (s.last_sync ? "off" : "warn");
+    const line = s.pending ? `Waiting for the hub's admin to approve <b>${esc(h.name || s.machine || "")}</b>. Approve it on the hub's <a href="${esc(h.hub)}/admin" target="_blank" rel="noopener">admin page</a>; syncing starts by itself.`
+      : s.ok ? `Synced ${agoS(s.last_sync)}${s.last_counts ? ` · last pass sent ${s.last_counts.pushed}, received ${s.last_counts.pulled}` : ""}`
+      : s.error ? esc(s.error) : (h.running ? "Starting…" : (h.no_sync ? "Sync is off (server started with --no-sync)" : "Not running"));
+    card.innerHTML = `<h2>Hub</h2>
+      <div class="hubstate"><span class="dot ${dot}"></span><span class="big">${esc(s.machine || h.name || "this PC")}</span><span class="muted">on</span><a href="${esc(h.hub)}" target="_blank" rel="noopener">${esc(String(h.hub).replace(/^https?:\/\//, ""))}</a></div>
+      <p style="margin:8px 0 12px">${line}</p>
+      <div class="row">
+        <button class="btn" id="hubSync">Sync now</button>
+        ${s.pending ? "" : `<input type="text" id="hubRename" value="${esc(s.machine || h.name || "")}" maxlength="60" style="width:200px"><button class="btn" id="hubRenameBtn">Rename</button>`}
+        <span class="grow"></span>
+        <button class="btn" id="hubChange">Change hub</button>
+        <button class="btn" id="hubDisconnect">Disconnect</button>
+      </div>
+      <div id="hubMsg" class="muted" style="font-size:13px;margin-top:8px"></div>`;
+    $("hubSync").onclick = async () => { await FS.hub({action: "sync"}); $("hubMsg").textContent = "Syncing…"; setTimeout(() => renderHubPage(), 1500); };
+    if ($("hubRenameBtn")) $("hubRenameBtn").onclick = async () => {
+      try { await FS.hub({action: "rename", name: cleanName($("hubRename").value)}); renderHubPage(); }
+      catch (e) { $("hubMsg").textContent = e.message; }
+    };
+    $("hubChange").onclick = () => { hubShowConnect = true; renderHubConnect(h); };
+    $("hubDisconnect").onclick = async () => {
+      if (!confirm("Stop syncing with this hub? Profiles already merged stay on this PC.")) return;
+      await FS.hub({action: "disconnect"}); hubShowConnect = false; renderHubPage();
+    };
+  } else {
+    card.innerHTML = `<h2>Hub</h2><p style="margin:0">This PC isn't connected to a hub. A hub merges timing profiles from all your PCs and keeps combos in step; see the README's "Sync profiles between machines".</p>`;
+  }
+  if (!quiet || !h.configured) renderHubConnect(h);
+}
+function renderHubConnect(h) {
+  const con = $("hubConnect");
+  con.hidden = h.configured && !hubShowConnect;
+  if (con.hidden) return;
+  if (con.contains(document.activeElement)) return;
+  con.innerHTML = `<h2>${h.configured ? "Change hub" : "Connect to a hub"}</h2>
+    <div style="display:grid;gap:10px;max-width:560px">
+      <label class="f">Hub address <input type="text" id="hcHub" placeholder="https://combolab.example.com" value="${esc(h.hub || "")}"></label>
+      <label class="f">This PC's name on the hub <input type="text" id="hcName" maxlength="60" value="${esc(cleanName(h.name || h.hostname))}"></label>
+      <div class="row"><button class="btn primary" id="hcJoin">Ask to join</button><span class="muted" style="font-size:12.5px">The hub's admin approves it on the hub's admin page.</span></div>
+      <details><summary class="muted">Have a token from the hub's admin page instead?</summary>
+        <div class="row" style="margin-top:8px"><input type="text" id="hcToken" placeholder="token" style="flex:1;min-width:220px"><button class="btn" id="hcTokenBtn">Connect with token</button></div>
+      </details>
+      <div id="hcMsg" style="font-size:13px"></div>
+    </div>`;
+  const go = async body => {
+    $("hcMsg").textContent = "Connecting…"; $("hcMsg").style.color = "";
+    try { await FS.hub(body); hubShowConnect = false; renderHubPage(); }
+    catch (e) { $("hcMsg").textContent = e.message; $("hcMsg").style.color = "var(--critical)"; }
+  };
+  $("hcJoin").onclick = () => go({action: "join", hub: $("hcHub").value.trim(), name: cleanName($("hcName").value)});
+  $("hcTokenBtn").onclick = () => go({action: "token", hub: $("hcHub").value.trim(), token: $("hcToken").value.trim()});
+}
 
 (async () => {
   if (FS.supported) {

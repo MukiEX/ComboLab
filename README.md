@@ -60,7 +60,7 @@ docker compose -f hub/docker-compose.yml run --rm hub set-admin-password      # 
 | Anyone | Open the overview: machines, combos, sample counts, which machines recorded them |
 | Sync machines (token) | Sync combos and profiles, back up and restore their own sessions |
 | Approved viewer keys | Download everything as one JSON file |
-| Admin (password, at `/admin`) | Approve or remove viewer keys, add or remove sync machines (the new token is shown once), change the password |
+| Admin (password, at `/admin`) | Approve or remove viewer keys, approve PCs asking to join, add or remove sync machines (a token made here is shown once), change the password |
 
 **Exporting:**
 - **From a browser:** open the hub's overview, type a name in the Export section and click **Request access**. The browser makes its own Ed25519 key; the private half can't be exported, even by the page. Once the admin approves the request on `/admin`, **Download everything** works from that browser. Each download signs a fresh one-time challenge.
@@ -78,15 +78,18 @@ docker compose -f hub/docker-compose.yml run --rm hub set-admin-password      # 
 
 Server-side backups: `combolab_hub.py export <folder>` writes everything out as plain JSON files. `allow-key`, `list-keys` and `remove-key` manage keys from the shell.
 
-**On each gaming PC**, once, in `reframework\data\ComboLab`:
+**On each gaming PC**, start **run_server.bat**, open the page from it (`http://localhost:8765`) and go to the **Hub** tab:
+1. Enter the hub's address and a name for this PC. It suggests the PC's hostname; letters, digits, `-`, `_` and `.` only.
+2. Click **Ask to join**. The PC makes its own sync token and sends the hub only a hash of it.
+3. Approve the request on the hub's `/admin` page under **Sync machines → Asking to join**. Syncing starts by itself, every 20 seconds while the server runs.
 
-```
-run_sync.bat setup https://combolab.example.com <token>
-```
+The Hub tab also has:
+- **Sync now**;
+- **Rename** (the hub keeps this PC's samples under the new name);
+- **Change hub** and **Disconnect**;
+- connecting with a token from the admin page instead of asking to join.
 
-From then on, **run_server.bat** syncs in the background every 20 seconds (or run `run_sync.bat` on its own). The page's header shows "Hub: synced just now".
-
-Every sample also records the training dummy's character, shown on the web page's profile tab ("recorded against") and in the chart's tooltips.
+The page's header shows the sync state ("Hub: synced just now" or "Hub: waiting for approval"). Without the page: `run_sync.bat setup https://combolab.example.com <token>`.
 
 **What syncs:**
 

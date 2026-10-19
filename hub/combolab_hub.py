@@ -38,7 +38,7 @@ import combolab_merge  # noqa: E402
 sys.path.insert(0, HERE)
 import hub_auth  # noqa: E402
 
-HUB_VERSION = "1.9.0"
+HUB_VERSION = "1.11.0"
 MAX_BODY = 16 * 1024 * 1024
 BACKUP_KINDS = ("sessions", "bot")
 EXPORT_NAMESPACE = "combolab-export"
@@ -133,7 +133,7 @@ class RateLimit:
 SESSIONS = Expiring(SESSION_TTL, 50)
 NONCES = Expiring(NONCE_TTL, 500)
 LOGIN_LIMIT = RateLimit(5, 900, 900)       # 5 wrong passwords in 15 min -> 15 min lockout
-REQUEST_LIMIT = RateLimit(5, 3600, 3600)   # 5 key requests per hour per address
+REQUEST_LIMIT = RateLimit(10, 3600, 3600)  # 10 key / join requests per hour per address
 
 
 def canon(obj):
@@ -170,6 +170,7 @@ class Store:
                 updated INTEGER, PRIMARY KEY (machine, kind, id));
             CREATE TABLE IF NOT EXISTS viewer_keys (key TEXT PRIMARY KEY, name TEXT, added INTEGER, last_export INTEGER);
             CREATE TABLE IF NOT EXISTS key_requests (key TEXT PRIMARY KEY, name TEXT, requested INTEGER, addr TEXT);
+            CREATE TABLE IF NOT EXISTS machine_requests (name TEXT PRIMARY KEY, token_sha TEXT UNIQUE, requested INTEGER, addr TEXT);
         """)
 
     def q(self, sql, args=()):
@@ -241,6 +242,47 @@ class Store:
             if hmac.compare_digest(th, h):
                 return name
         return None
+
+    # ---------------------------------------------------------------- PCs asking to join
+    def request_machine(self, name, token_sha, addr):
+        """A PC asks to sync under `name`, proving later that it holds the token
+        whose hash it sent. Returns "pending", "taken" or "full"."""
+        if self.q("SELECT 1 FROM machines WHERE name=?", (name,)):
+            return "taken"
+        self.q("DELETE FROM machine_requests WHERE token_sha=? AND name<>?", (token_sha, name))
+        if not self.q("SELECT 1 FROM machine_requests WHERE name=?", (name,)) and \
+                self.q("SELECT COUNT(*) FROM machine_requests")[0][0] >= MAX_PENDING_KEYS:
+            return "full"
+        self.q("INSERT OR REPLACE INTO machine_requests (name, token_sha, requested, addr) VALUES (?, ?, ?, ?)",
+               (name, token_sha, int(time.time()), addr))
+        return "pending"
+
+    def pending_machine(self, tok):
+        if not tok:
+            return None
+        row = self.q("SELECT name FROM machine_requests WHERE token_sha=?", (token_hash(tok),))
+        return row[0][0] if row else None
+
+    def approve_machine(self, name):
+        row = self.q("SELECT token_sha FROM machine_requests WHERE name=?", (name,))
+        if not row:
+            return False
+        with self.lock:
+            self.db.execute("INSERT OR REPLACE INTO machines (name, token_sha, created) VALUES (?, ?, ?)", (name, row[0][0], int(time.time())))
+            self.db.execute("DELETE FROM machine_requests WHERE name=?", (name,))
+        return True
+
+    def rename_machine(self, old, new):
+        if self.q("SELECT 1 FROM machines WHERE name=?", (new,)) or self.q("SELECT 1 FROM machine_requests WHERE name=?", (new,)):
+            return False
+        with self.lock:
+            self.db.execute("BEGIN")
+            self.db.execute("UPDATE machines SET name=? WHERE name=?", (new, old))
+            self.db.execute("UPDATE combos SET by=? WHERE by=?", (new, old))
+            self.db.execute("UPDATE profiles SET by=? WHERE by=?", (new, old))
+            self.db.execute("UPDATE backups SET machine=? WHERE machine=?", (new, old))
+            self.db.execute("COMMIT")
+        return True
 
     def seen(self, name, agent, addr, mod_id=None):
         with self.lock:
@@ -326,6 +368,10 @@ class Handler(BaseHTTPRequestHandler):
         tok = a[7:].strip() if a.lower().startswith("bearer ") else ""
         name = STORE.machine_for(tok)
         if not name:
+            pending = STORE.pending_machine(tok)
+            if pending:
+                self._json(401, {"error": "waiting for the hub's admin to approve '%s'" % pending, "pending": pending})
+                return None
             time.sleep(0.5)  # slow down guessing
             self._json(401, {"error": "unknown or missing token"})
             return None
@@ -440,11 +486,34 @@ class Handler(BaseHTTPRequestHandler):
             return self._export(body)
         if verb == "POST" and p == ["key-requests"]:
             return self._key_request(body)
+        if verb == "POST" and p == ["join"]:
+            name, tsha = str(body.get("name") or ""), str(body.get("token_sha") or "").lower()
+            if not valid_id(name) or len(name) > 60:
+                return self._json(400, {"error": "names use letters, digits, - _ . (up to 60)"})
+            if len(tsha) != 64 or any(c not in "0123456789abcdef" for c in tsha):
+                return self._json(400, {"error": "bad token hash"})
+            if not REQUEST_LIMIT.allow(self.client_ip()):
+                return self._json(429, {"error": "too many requests; try later"})
+            r = STORE.request_machine(name, tsha, self.client_ip())
+            if r == "taken":
+                return self._json(409, {"error": "the hub already has a machine called '%s'; pick another name" % name})
+            if r == "full":
+                return self._json(429, {"error": "the hub has too many pending requests"})
+            return self._json(200, {"status": "pending", "name": name})
         if p[:1] == ["admin"] and verb == "POST":
             return self._admin_post(p[1:], body)
         me = self._machine()
         if not me:
             return
+        if verb == "POST" and p == ["rename"]:
+            new = str(body.get("name") or "")
+            if not valid_id(new) or len(new) > 60:
+                return self._json(400, {"error": "names use letters, digits, - _ . (up to 60)"})
+            if new == me:
+                return self._json(200, {"machine": me})
+            if not STORE.rename_machine(me, new):
+                return self._json(409, {"error": "the hub already has a machine called '%s'" % new})
+            return self._json(200, {"machine": new})
         if verb == "PUT" and len(p) == 2 and p[0] == "combos" and valid_id(p[1]):
             if not isinstance(body.get("steps"), list) or not body.get("steps"):
                 return self._json(400, {"error": "not a combo"})
@@ -556,6 +625,13 @@ class Handler(BaseHTTPRequestHandler):
             if action == "remove":
                 STORE.q("DELETE FROM machines WHERE name=?", (name,))
                 return self._json(200, admin_state())
+            if action == "approve":
+                if not STORE.approve_machine(name):
+                    return self._json(404, {"error": "no request from '%s'" % name})
+                return self._json(200, admin_state())
+            if action == "reject":
+                STORE.q("DELETE FROM machine_requests WHERE name=?", (name,))
+                return self._json(200, admin_state())
             return self._json(400, {"error": "unknown action"})
         if p == ["password"]:
             if not hub_auth.check_password(str(body.get("current") or ""), STORE.meta("admin_pw") or ""):
@@ -608,6 +684,8 @@ def admin_state():
                      for k, n, r, ad in STORE.q("SELECT key, name, requested, addr FROM key_requests ORDER BY requested DESC")],
         "machines": [{"name": n, "last_seen": ls, "agent": ag, "created": cr, "addr": ad}
                      for n, ls, ag, cr, ad in STORE.q("SELECT name, last_seen, agent, created, addr FROM machines ORDER BY name")],
+        "machine_requests": [{"name": n, "requested": r, "addr": ad}
+                             for n, r, ad in STORE.q("SELECT name, requested, addr FROM machine_requests ORDER BY requested DESC")],
     }
 
 

@@ -227,6 +227,56 @@ def test_access(url):
     check(codes[-1] == 429, "locked out after 5 wrong passwords")
 
 
+def test_join_from_page(url):
+    """The ComboLab page's Hub tab: a PC asks to join under its own name, the
+    admin approves, it syncs; then rename, name clash and disconnect."""
+    import combolab_server
+    root = tempfile.mkdtemp()
+    try:
+        combolab_server.ROOT = root
+        combolab_server.NO_SYNC = False
+        srv = combolab_server.ThreadingHTTPServer(("127.0.0.1", 0), combolab_server.Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        local = "http://127.0.0.1:%d" % srv.server_address[1]
+        code, h, _ = http(local, "/api/hub")
+        check(code == 200 and not h["configured"] and h["hostname"], "page sees an unconnected server")
+        code, h, _ = http(local, "/api/hub", {"action": "join", "hub": url, "name": "pc-new"})
+        check(code == 200 and h["configured"] and h["name"] == "pc-new", "join request sent")
+        cfg = combolab_sync.read_json(os.path.join(root, "sync.json"))
+        check(len(cfg["token"]) > 30 and not combolab_hub.STORE.machine_for(cfg["token"]), "PC holds its own token; not active yet")
+
+        def wait(pred, secs=6):
+            t = time.time()
+            while time.time() - t < secs:
+                h = http(local, "/api/hub")[1]
+                if pred(h):
+                    return h
+                time.sleep(0.2)
+            return http(local, "/api/hub")[1]
+        h = wait(lambda h: h["status"].get("pending"))
+        check(h["status"].get("pending"), "status says waiting for approval")
+        st = combolab_hub.admin_state()
+        check([m["name"] for m in st["machine_requests"]] == ["pc-new"], "admin sees the join request")
+        combolab_hub.STORE.approve_machine("pc-new")
+        http(local, "/api/hub", {"action": "sync"})
+        h = wait(lambda h: h["status"].get("ok"))
+        check(h["status"].get("ok") and h["status"].get("machine") == "pc-new", "approved PC syncs")
+        code, h, _ = http(local, "/api/hub", {"action": "rename", "name": "pc-renamed"})
+        check(code == 200 and combolab_hub.STORE.machine_for(cfg["token"]) == "pc-renamed", "PC renamed itself")
+        # another PC can't take that name
+        root2 = tempfile.mkdtemp()
+        combolab_server.ROOT = root2
+        code, d, _ = http(local, "/api/hub", {"action": "join", "hub": url, "name": "pc-renamed"})
+        check(code == 400 and "already has" in d["error"], "name clash refused")
+        combolab_server.ROOT = root
+        code, h, _ = http(local, "/api/hub", {"action": "disconnect"})
+        check(code == 200 and not h["configured"] and not os.path.exists(os.path.join(root, "sync.json")), "disconnected")
+        srv.shutdown()
+    finally:
+        combolab_server.SYNC.stop()
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_sshsig_vector():
     import hub_auth
     d = os.path.join(ROOT, "tests", "testdata", "sshsig")
@@ -314,6 +364,7 @@ def test_end_to_end():
         ov = combolab_hub.overview()
         check(len(ov["machines"]) == 2 and ov["combos"][0]["name"] == "Mai X (edited)", "overview lists machines and combos")
         test_access(url)
+        test_join_from_page(url)
         srv.shutdown()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

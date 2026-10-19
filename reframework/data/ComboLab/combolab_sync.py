@@ -38,7 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import combolab_merge  # noqa: E402
 
-AGENT_VERSION = "1.9.0"
+AGENT_VERSION = "1.11.0"
 
 
 def canon(obj):
@@ -75,7 +75,40 @@ def combo_hash(c):
 
 
 class HubError(Exception):
-    pass
+    def __init__(self, msg, code=None, data=None):
+        Exception.__init__(self, msg)
+        self.code, self.data = code, data or {}
+
+
+def config_path(root):
+    return os.path.join(root, "sync.json")
+
+
+def disconnect(root):
+    """Forget the hub: sync settings, sync state and status. Merged profiles the
+    game already took in stay in profiles/."""
+    for p in (config_path(root), os.path.join(root, "shared", "_sync_state.json"), os.path.join(root, "shared", "_status.json")):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+
+
+def save_config(root, hub, token, name=None, interval=20, joined=False):
+    old = {}
+    if os.path.isfile(config_path(root)):
+        try:
+            old = read_json(config_path(root))
+        except (ValueError, OSError):
+            old = {}
+    if old.get("hub") and old.get("hub").rstrip("/") != hub.rstrip("/"):
+        # a different hub: start its sync state fresh
+        for p in (os.path.join(root, "shared", "_sync_state.json"), os.path.join(root, "shared", "_status.json")):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+    write_json(config_path(root), {"hub": hub.rstrip("/"), "token": token, "name": name, "interval": interval, "joined": joined}, indent=1)
 
 
 class Agent:
@@ -93,6 +126,8 @@ class Agent:
         self.status_path = os.path.join(root, "shared", "_status.json")
         self.ctx = ssl.create_default_context()
         self.stop = threading.Event()
+        self.wake = threading.Event()
+        self.name = cfg.get("name")
         self.state = {"combos": {}, "profiles": {}, "backups": {}, "combos_rev": 0}
         if os.path.isfile(self.state_path):
             try:
@@ -121,11 +156,20 @@ class Agent:
             with urllib.request.urlopen(req, timeout=30, context=self.ctx if url.startswith("https") else None) as r:
                 return json.loads(r.read().decode("utf-8") or "null")
         except urllib.error.HTTPError as e:
+            body_text = ""
             try:
-                msg = json.loads(e.read().decode("utf-8")).get("error")
+                body_text = e.read().decode("utf-8")
+                msg = json.loads(body_text).get("error")
             except Exception:
                 msg = None
-            raise HubError("%s %s: HTTP %d %s" % (method, path, e.code, msg or e.reason))
+            data = {}
+            try:
+                data = json.loads(body_text) if body_text else {}
+            except ValueError:
+                pass
+            if e.code == 401 and data.get("pending"):
+                raise HubError("waiting for the hub's admin to approve '%s'" % data["pending"], 401, data)
+            raise HubError("%s %s: HTTP %d %s" % (method, path, e.code, msg or e.reason), e.code, data)
         except (urllib.error.URLError, OSError) as e:
             raise HubError("can't reach %s (%s)" % (self.hub, getattr(e, "reason", e)))
 
@@ -263,7 +307,7 @@ class Agent:
                     st[key] = h
                     stats["pushed"] += 1
 
-    def write_status(self, ok, err, shared=None, stats=None):
+    def write_status(self, ok, err, shared=None, stats=None, pending=False):
         prev = {}
         if os.path.isfile(self.status_path):
             try:
@@ -271,7 +315,7 @@ class Agent:
             except (ValueError, OSError):
                 prev = {}
         st = {
-            "hub": self.hub, "machine": self.machine, "ok": ok, "error": err,
+            "hub": self.hub, "machine": self.machine or self.name, "ok": ok, "error": err, "pending": pending,
             "last_sync": int(time.time()), "agent": AGENT_VERSION,
             "combos_rev": self.state.get("combos_rev", 0),
             "shared": shared if shared is not None else prev.get("shared", {}),
@@ -292,7 +336,7 @@ class Agent:
             except HubError as e:
                 self.log("ComboLab sync: %s" % e)
                 try:
-                    self.write_status(False, str(e))
+                    self.write_status(False, str(e), pending=bool(e.data.get("pending")))
                 except OSError:
                     pass
             except Exception as e:  # keep the loop alive
@@ -301,7 +345,37 @@ class Agent:
                     self.write_status(False, repr(e))
                 except OSError:
                     pass
-            self.stop.wait(self.interval)
+            self.wake.wait(self.interval)
+            self.wake.clear()
+
+    def poke(self):
+        """Sync now instead of at the next interval."""
+        self.wake.set()
+
+    def halt(self):
+        self.stop.set()
+        self.wake.set()
+
+    # ---------------------------------------------------------------- joining
+    def join(self, name):
+        """Ask the hub to let this PC sync as `name`. The PC makes its own token
+        and sends only its hash; the admin approves the request on /admin."""
+        import secrets
+        tok = secrets.token_urlsafe(32)
+        th = hashlib.sha256(tok.encode("utf-8")).hexdigest()
+        saved, self.token = self.token, ""
+        try:
+            r = self.call("POST", "/api/v1/join", {"name": name, "token_sha": th})
+        except HubError:
+            self.token = saved
+            raise
+        self.token, self.name = tok, r.get("name", name)
+        return r
+
+    def rename(self, name):
+        r = self.call("POST", "/api/v1/rename", {"name": name})
+        self.name = self.machine = r.get("machine", name)
+        return r
 
     def restore(self, machine=None, force=False):
         lst = self.call("GET", "/api/v1/backups" + ("?machine=" + self.q(machine) if machine else ""))

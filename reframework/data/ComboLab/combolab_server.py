@@ -19,6 +19,104 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 TOKEN = None
+NO_SYNC = False
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+
+class SyncRunner:
+    """The hub sync agent, run in the background; restartable from the page."""
+
+    def __init__(self):
+        import threading
+        self.lock = threading.Lock()
+        self.agent = None
+
+    def start(self):
+        import threading
+        import combolab_sync
+        with self.lock:
+            if self.agent:
+                self.agent.halt()
+                self.agent = None
+            if NO_SYNC or not os.path.isfile(combolab_sync.config_path(ROOT)):
+                return None
+            self.agent = combolab_sync.Agent(ROOT)
+            threading.Thread(target=self.agent.run_forever, daemon=True).start()
+            return self.agent
+
+    def stop(self):
+        with self.lock:
+            if self.agent:
+                self.agent.halt()
+                self.agent = None
+
+
+SYNC = SyncRunner()
+
+
+def hub_info():
+    import combolab_sync
+    cfg, st = {}, {}
+    try:
+        cfg = combolab_sync.read_json(combolab_sync.config_path(ROOT))
+    except (ValueError, OSError):
+        pass
+    try:
+        st = combolab_sync.read_json(os.path.join(ROOT, "shared", "_status.json"))
+    except (ValueError, OSError):
+        pass
+    return {"configured": bool(cfg.get("hub")), "hub": cfg.get("hub"), "name": cfg.get("name"),
+            "running": SYNC.agent is not None, "no_sync": NO_SYNC, "hostname": socket.gethostname(),
+            "status": st}
+
+
+def hub_action(body):
+    """Hub settings from the page: join (pick a name), token (paste one from the
+    admin page), rename, sync (now), disconnect."""
+    import combolab_sync
+    act = body.get("action")
+    if act == "disconnect":
+        SYNC.stop()
+        combolab_sync.disconnect(ROOT)
+        return 200, hub_info()
+    if act == "sync":
+        if SYNC.agent:
+            SYNC.agent.poke()
+        return 200, hub_info()
+    if act in ("join", "token"):
+        hub = str(body.get("hub") or "").strip().rstrip("/")
+        if not hub.startswith(("https://", "http://")):
+            return 400, {"error": "the hub address starts with https://"}
+        ag = combolab_sync.Agent(ROOT, hub, "x")
+        try:
+            if act == "join":
+                name = str(body.get("name") or "").strip()
+                ag.join(name)
+                combolab_sync.save_config(ROOT, hub, ag.token, ag.name)
+            else:
+                tok = str(body.get("token") or "").strip()
+                ag.token = tok
+                idx = ag.call("GET", "/api/v1/index")
+                combolab_sync.save_config(ROOT, hub, tok, idx.get("machine"), joined=True)
+        except combolab_sync.HubError as e:
+            if act == "token" and e.data.get("pending"):
+                combolab_sync.save_config(ROOT, hub, ag.token, e.data["pending"])
+            else:
+                return 400, {"error": str(e.data.get("error") or e)}
+        SYNC.start()
+        return 200, hub_info()
+    if act == "rename":
+        if not SYNC.agent:
+            return 400, {"error": "not connected to a hub"}
+        try:
+            SYNC.agent.rename(str(body.get("name") or "").strip())
+        except combolab_sync.HubError as e:
+            return 400, {"error": str(e.data.get("error") or e)}
+        cfg = combolab_sync.read_json(combolab_sync.config_path(ROOT))
+        combolab_sync.save_config(ROOT, cfg["hub"], cfg["token"], SYNC.agent.name, joined=True)
+        SYNC.agent.poke()
+        return 200, hub_info()
+    return 400, {"error": "unknown action"}
 ALLOWED_DIRS = ("", "combos", "profiles", "sessions", "shared", "bot")
 
 
@@ -79,7 +177,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed():
             return self._json(401, {"error": "token required"})
         if path == "/api/info":
-            return self._json(200, {"name": "ComboLab", "root": os.path.basename(ROOT), "token": bool(TOKEN)})
+            return self._json(200, {"name": "ComboLab", "root": os.path.basename(ROOT), "token": bool(TOKEN), "hub_ui": True})
+        if path == "/api/hub":
+            return self._json(200, hub_info())
         if path == "/api/list":
             d = safe_path(q.get("dir", ""))
             if d is None:
@@ -126,6 +226,20 @@ class Handler(BaseHTTPRequestHandler):
         os.replace(tmp, p)
         return self._json(200, {"ok": True})
 
+    def do_POST(self):
+        path, q = self._query()
+        if path != "/api/hub":
+            return self._send(404, b"", "text/plain")
+        if not self._authed():
+            return self._json(401, {"error": "token required"})
+        n = int(self.headers.get("Content-Length", "0") or 0)
+        try:
+            body = json.loads(self.rfile.read(min(n, 65536)).decode("utf-8") or "{}")
+        except ValueError:
+            return self._json(400, {"error": "not json"})
+        code, out = hub_action(body if isinstance(body, dict) else {})
+        return self._json(code, out)
+
     def do_DELETE(self):
         path, q = self._query()
         if path != "/api/file" or not self._authed():
@@ -156,7 +270,7 @@ def lan_addresses():
 
 
 def main():
-    global ROOT, TOKEN
+    global ROOT, TOKEN, NO_SYNC
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="0.0.0.0", help="interface to listen on (default: all; use 127.0.0.1 for this PC only)")
     ap.add_argument("--port", type=int, default=8765)
@@ -176,13 +290,12 @@ def main():
             print("  other device: http://%s:%d" % (ip, a.port))
     if TOKEN:
         print("  token required: %s" % TOKEN)
-    if not a.no_sync and os.path.isfile(os.path.join(ROOT, "sync.json")):
-        import threading
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import combolab_sync
-        agent = combolab_sync.Agent(ROOT)
-        threading.Thread(target=agent.run_forever, daemon=True).start()
+    NO_SYNC = a.no_sync
+    agent = SYNC.start()
+    if agent:
         print("  hub sync:     %s" % agent.hub)
+    elif not NO_SYNC:
+        print("  hub sync:     off (connect to a hub in the page's Hub tab)")
     print("Ctrl+C to stop.")
     try:
         srv.serve_forever()
