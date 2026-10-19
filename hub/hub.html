@@ -70,6 +70,7 @@ pre.box { background: var(--surface-2); border: 1px solid var(--ring); border-ra
   <nav><a href="./" id="navView">Overview</a><a href="admin" id="navAdmin">Admin</a></nav>
   <span class="sp"></span>
   <span id="who" class="muted"></span>
+  <span id="ver" class="muted" style="font-size:12px"></span>
   <button class="btn" id="btnLogout" hidden>Sign out</button>
 </header>
 <main>
@@ -172,6 +173,7 @@ const say = (id, text, kind) => { const el = $(id); el.textContent = text || "";
 // ------------------------------------------------------------------ public overview
 async function loadOverview() {
   const d = await api("api/v1/overview");
+  $("ver").textContent = "hub " + d.version;
   const profs = d.combos.flatMap(c => c.profiles);
   const samples = d.combos.reduce((n, c) => n + (c.profiles.find(p => p.current)?.samples || 0), 0);
   $("stats").innerHTML = [[d.machines.length, "machines"], [d.combos.length, "combos"], [profs.filter(p => p.current).length, "profiles"], [samples.toLocaleString(), "samples (current versions)"]]
@@ -340,6 +342,7 @@ $("pwForm").onsubmit = async e => {
 
 // ------------------------------------------------------------------ start
 $("navView").href = BASE; $("navAdmin").href = BASE + "admin";
+fetch(BASE + "healthz").then(r => r.json()).then(d => { $("ver").textContent = "hub " + d.version; }).catch(() => {});
 if (isAdmin) {
   $("navAdmin").classList.add("on"); $("adminPage").hidden = false; loadAdmin();
 } else {
