@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.17.0"
+local VERSION = "1.18.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -316,6 +316,10 @@ end
 local function on_attempt(res)
     local P = S.profile
     if not P then return end
+    -- the bot's jump-in probes (measuring the jump, finding the spacing) press
+    -- things the combo doesn't: nothing from them is learned or recorded
+    local cur = S.bot and S.bot.running and S.bot.cur
+    if cur and (cur.phase == "M" or cur.phase == "J") then return end
     local botting = S.bot and S.bot.running
     P:grade(res, { spam_block = (not botting) and (S.mode == "train") and cfg.spam_block })
     if botting then

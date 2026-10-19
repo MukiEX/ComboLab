@@ -524,7 +524,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.17.0";
+const PAGE_VERSION = "1.18.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1541,6 +1541,16 @@ async function migrateRawDR() {
   }
 }
 
+// Remembers a jump-in the bot found (distance + press timing) in the combo
+// file, so the next run skips the search.
+async function saveJumpIn(r) {
+  const c = r && r.ok && r.jump && st.combos[r.id];
+  if (!c || !FS.ok) return;
+  const old = c.bot && c.bot.jump;
+  if (old && old.jd === r.jump.jd && old.spacing === r.jump.spacing) return;
+  await writeCombo({...c, bot: {...(c.bot || {}), jump: {jd: r.jump.jd, spacing: r.jump.spacing}}});
+}
+
 // Marks an experimental combo verified (first clean run by the player or the bot).
 async function verifyCombo(id, how) {
   const c = st.combos[id];
@@ -1589,6 +1599,7 @@ async function pollData(force) {
     // the game switched mode by itself (F5): follow it, unless we just asked for one
     if (st.sel && s.data.combo_id === st.sel && s.data.mode && subOf(s.data.mode) !== st.sub && Date.now() - st.modeSentAt > 4000) setSub(subOf(s.data.mode), false);
     for (const r of arr(s.data.bot && s.data.bot.results)) if (r.ok && st.combos[r.id] && st.combos[r.id].experimental) verifyCombo(r.id, "research bot");
+    for (const r of arr(s.data.bot && s.data.bot.results)) saveJumpIn(r);
     renderHeaderStatus(); renderLibrary(); renderComboHead(); renderBot();
     if (st.sub === "training") renderToday();
   } else if (st.status) renderHeaderStatus();
@@ -1695,7 +1706,7 @@ function renderSpeed() {
 }
 
 function fmtTime(sec) { sec = Math.max(0, Math.round(sec)); const m = Math.floor(sec / 60); return m ? `${m}m ${sec % 60}s` : `${sec}s`; }
-const PHASE = {A: "finding windows", B: "sweet-spot pass", C: "checking the full combo"};
+const PHASE = {A: "finding windows", B: "sweet-spot pass", C: "checking the full combo", M: "measuring the jump", J: "finding the jump-in distance and timing"};
 function renderBot() {
   renderSpeed();
   const nb = st.multi.size > 1 ? st.multi.size : 0;
@@ -1721,7 +1732,7 @@ function renderBot() {
       const ws = r.windows ? Object.entries(r.windows).map(([k, w]) => `${k}: ${w.E}–${w.L}`).join(" · ") : "";
       return `<div class="botres"><b style="color:${r.ok ? "var(--good)" : "var(--critical)"}">${r.ok ? "✓" : "✕"}</b>
         <span>${esc(r.name || r.id)}</span>
-        <span class="muted" style="font-size:12px">${r.ok ? `${r.clean}/${r.clean_of} clean at target timing · ${r.attempts} attempts · ${fmtTime(r.seconds || 0)}${ws ? " · windows " + ws : ""}` : esc(r.reason || "")}</span></div>`;
+        <span class="muted" style="font-size:12px">${r.ok ? `${r.clean}/${r.clean_of} clean at target timing · ${r.attempts} attempts · ${fmtTime(r.seconds || 0)}${ws ? " · windows " + ws : ""}${r.jump ? ` · jump-in: spacing ${r.jump.spacing}, press ${r.jump.jd}f after the jump` : ""}` : esc(r.reason || "")}</span></div>`;
     }).join("");
   }
   box.innerHTML = html;

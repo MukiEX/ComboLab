@@ -47,7 +47,6 @@ function Bot.step_plan(st, k, prev_st, fighter_id, control)
     local label = tostring(st.label or ""):upper():gsub("%s", "")
     local air = false
     if label:sub(1, 2) == "J." then air = true; label = label:sub(3) end
-    if air and k == 1 then return nil, "starts with a jump-in (" .. st.label .. ")" end
     local sa = (SA_BY_FIGHTER[fighter_id] or {})[label] or SA_DEFAULT[label]
     if sa then label = sa end
 
@@ -99,6 +98,8 @@ function Bot.step_plan(st, k, prev_st, fighter_id, control)
     local lead = 0
     for _, e in ipairs(plan) do if -e.from > lead then lead = -e.from end end
     plan.lead = lead
+    -- a jump-in starter: the bot jumps forward first (see phases M and J)
+    if air and k == 1 then plan.jump = true end
     return plan
 end
 
@@ -190,7 +191,20 @@ function Bot:next_combo()
                 mid = {}, win = {}, attempts = 0, t0 = os.clock(),
             }
             self.env.trace(string.format("combo %s (%d steps, %s, spacing %s)", id, #combo.steps, self.cur.position, tostring(self.cur.spacing)))
-            self:begin_phase("A", 2)
+            if plans[1].jump then
+                -- a jump-in found on an earlier run (saved in the combo by the page) skips the search
+                local bj = bot.jump
+                if type(bj) == "table" and tonumber(bj.jd) and tonumber(bj.spacing) and not self.opts.reset then
+                    self.cur.jd, self.cur.spacing = tonumber(bj.jd), tonumber(bj.spacing)
+                    self.cur.jump, self.cur.jump_saved = { jd = self.cur.jd, spacing = self.cur.spacing }, true
+                    self.env.trace(string.format("jump-in from an earlier run: spacing %d, press %d", self.cur.spacing, self.cur.jd))
+                    if #combo.steps >= 2 then self:begin_phase("A", 2) else self:begin_phase("C") end
+                else
+                    self:begin_phase("M")
+                end
+            else
+                self:begin_phase("A", 2)
+            end
             return
         end
     end
@@ -224,6 +238,28 @@ function Bot:begin_phase(phase, k)
     elseif phase == "C" then
         c.cn, c.cok = 0, 0
         c.d = nil
+    elseif phase == "M" then
+        -- measure the forward jump: how long until it lands, how far it goes
+        -- (from far apart, so the dummy can't get in the way)
+        c.jd = 12
+        c.spacing_user = c.spacing_user or c.spacing
+        c.spacing = 300
+    elseif phase == "J" then
+        -- find where to stand and when to press so the jump-in hits as deep
+        -- as possible: try spacings around the jump's length; at each, scan
+        -- the press from just before landing backwards until it hits
+        local A, T = c.jm.A, c.jm.T
+        local sp = {}
+        for _, off in ipairs({ -35, -15, -55, -75, 5, -95 }) do
+            local s2 = math.floor(T + off - 30)
+            if s2 >= 0 then sp[#sp + 1] = s2 end
+        end
+        if #sp == 0 then sp[1] = 0 end
+        local jl = {}
+        for jd = A - 1, math.max(6, A - 30), -2 do jl[#jl + 1] = jd end
+        c.js = { sp = sp, si = 1, jl = jl, ji = 1, tried = {} }
+        c.spacing = sp[1]
+        c.jd = jl[1]
     end
     self:prep()
 end
@@ -270,6 +306,7 @@ end
 
 function Bot:last_step()
     local c = self.cur
+    if c.phase == "M" or c.phase == "J" then return 1 end
     if c.phase == "A" then return c.k end
     return c.N
 end
@@ -293,6 +330,7 @@ function Bot:on_result(res)
     if not self.running or not self.cur then return end
     if self.state ~= "run" and self.state ~= "await" then return end
     local c = self.cur
+    if c.phase == "M" or c.phase == "J" then return end       -- judged by the bot itself (probe_done)
     c.attempts = c.attempts + 1
     self.total_attempts = self.total_attempts + 1
     self.attempt_time = os.clock()
@@ -338,6 +376,12 @@ function Bot:on_result(res)
         for j = 1, k - 1 do if not ok_at(j) then prev_ok = false; c.bad_step = j end end
         if not prev_ok then
             c.instab = (c.instab or 0) + 1
+            if c.instab >= 3 and c.jump_saved and c.bad_step == 1 then
+                -- the saved jump-in no longer lands: measure it again
+                c.jump_saved, c.instab = nil, 0
+                self.env.trace("saved jump-in doesn't hit any more; measuring again")
+                return self:begin_phase("M")
+            end
             if c.instab >= 3 then
                 local j = c.bad_step
                 local why = (j == 1) and "the first hit doesn't connect from this spacing (check position/distance and dummy settings)"
@@ -460,6 +504,67 @@ function Bot:on_result(res)
     end
 end
 
+-- end of a jump measurement (M) or a jump-in probe (J)
+function Bot:probe_done()
+    local c, P = self.cur, self.probe
+    self.probe = nil
+    c.attempts = c.attempts + 1
+    self.total_attempts = self.total_attempts + 1
+    self.attempt_time = os.clock()
+    if c.phase == "M" then
+        -- takeoff: first frame x moves; landing: x stops for 2 frames after that
+        local xs, t0, x0, t1, x1 = P.xs, nil, nil, nil, nil
+        for i = 2, #xs do
+            local dx = math.abs(xs[i].x - xs[i - 1].x)
+            if not t0 and dx > 0.5 then t0, x0 = xs[i - 1].t, xs[i - 1].x end
+            if t0 and not t1 and i < #xs and dx < 0.01 and math.abs(xs[i + 1].x - xs[i].x) < 0.01 then t1, x1 = xs[i].t, xs[i].x end
+        end
+        if not t0 or not t1 then
+            return self:fail_combo("couldn't see a forward jump (is the dummy in the way, or is 9 not a jump?)")
+        end
+        c.jm = { A = t1 - P.jump_t, T = math.abs(x1 - x0) }
+        self.env.trace(string.format("jump: lands %d frames after the input, travels %.0f", c.jm.A, c.jm.T))
+        return self:begin_phase("J")
+    end
+    -- J: did the air attack (started before landing) hit?
+    local js = c.js
+    local air_hit = P.hit_t ~= nil and P.atk_t ~= nil and P.atk_t < P.jump_t + c.jm.A
+    js.tried[c.spacing .. ":" .. c.jd] = air_hit
+    self.last_probe = { phase = "J", d = c.jd, ok = air_hit, res = air_hit and "air hit" or "no air hit", t = os.clock() }
+    self.env.trace(string.format("jump-in probe spacing %d press %d after the jump: %s", c.spacing, c.jd, air_hit and "hit" or "no"))
+    if js.refine then
+        if not air_hit then c.jd = js.found end
+        return self:jump_found()
+    end
+    if air_hit then
+        js.found = c.jd
+        if js.tried[c.spacing .. ":" .. (c.jd + 1)] == nil and c.jd + 1 < c.jm.A then
+            js.refine = true
+            c.jd = c.jd + 1            -- one frame later (deeper) was skipped by the coarse scan
+            return self:prep()
+        end
+        return self:jump_found()
+    end
+    js.ji = js.ji + 1
+    if not js.jl[js.ji] then
+        js.si, js.ji = js.si + 1, 1
+        if not js.sp[js.si] then
+            return self:fail_combo("the jump-in never hit (tried " .. #js.sp .. " distances); set the spacing by hand or check the dummy")
+        end
+        c.spacing = js.sp[js.si]
+    end
+    c.jd = js.jl[js.ji]
+    return self:prep()
+end
+
+function Bot:jump_found()
+    local c = self.cur
+    c.jump = { jd = c.jd, spacing = c.spacing }
+    self.env.trace(string.format("jump-in: spacing %d, press %d frames after the jump", c.spacing, c.jd))
+    if c.N >= 2 then return self:begin_phase("A", 2) end
+    return self:begin_phase("C")
+end
+
 function Bot:fail_combo(why)
     local c = self.cur
     local nm = " " .. tostring(c.combo.name or "") .. " "
@@ -482,7 +587,7 @@ function Bot:finish_combo(why)
     local r = {
         id = c.id, name = c.combo.name, ok = why == nil, reason = why,
         attempts = c.attempts, seconds = math.floor(os.clock() - c.t0),
-        windows = windows, clean = c.cok, clean_of = c.cn, position = c.position,
+        windows = windows, clean = c.cok, clean_of = c.cn, position = c.position, jump = c.jump,
     }
     self.results[#self.results + 1] = r
     self.env.trace(string.format("combo done %s ok=%s clean %s/%s attempts %d", c.id, tostring(r.ok), tostring(c.cok), tostring(c.cn), c.attempts))
@@ -521,6 +626,10 @@ end
 function Bot:schedule(k, press)
     local c = self.cur
     local plan = c.plans[k]
+    if k == 1 and plan.jump then
+        self.events[#self.events + 1] = { from = press - c.jd, to = press - c.jd + 1, dir = 9, btn = 0, prio = 0 }
+        if c.phase == "M" then self.press[k] = press; return end     -- just the jump
+    end
     for _, e in ipairs(plan) do
         self.events[#self.events + 1] = { from = press + e.from, to = press + e.to, dir = e.dir, btn = e.btn, prio = k }
     end
@@ -547,6 +656,12 @@ function Bot:observe(s)
         self.quiet = 0
     else
         self.quiet = (self.quiet or 0) + 1
+    end
+    local P = self.probe
+    if P and (self.state == "run" or self.state == "await") and s.t >= P.jump_t then
+        P.xs[#P.xs + 1] = { t = s.t, x = s.u.x or 0 }
+        if (s.o.stun or 0) > 0 and (not prev or (prev.o.stun or 0) == 0) and not P.hit_t then P.hit_t = s.t end
+        if s.t > P.press and not P.atk_t and is_new_instance(s, prev) then P.atk_t, P.atk_act = s.t, s.u.act end
     end
     if self.state ~= "run" then return end
     local c = self.cur
@@ -616,11 +731,20 @@ function Bot:update()
             self.state = "run"
             self.events, self.press, self.anchor = {}, {}, {}
             local c = self.cur
-            local p1 = now + c.plans[1].lead + 3
+            local lead1 = c.plans[1].jump and (c.jd + 1) or c.plans[1].lead
+            local p1 = now + lead1 + 3
             self:schedule(1, p1)
             self.wait_anchor = (self:last_step() >= 2) and 1 or nil
             if not self.wait_anchor then self.state = "await"; self.await_t = now end
             self.run_t = now
+            self.probe = nil
+            if c.phase == "M" or c.phase == "J" then
+                self.probe = { press = p1, jump_t = p1 - c.jd, xs = {}, stun0 = nil }
+            end
+        end
+    elseif self.probe and (self.state == "await" or self.state == "run") then
+        if now >= self.probe.jump_t + (self.cur.phase == "M" and 90 or ((self.cur.jm and self.cur.jm.A or 50) + 40)) then
+            return self:probe_done()
         end
     elseif self.state == "await" or self.state == "run" then
         if now - (self.run_t or now) > 600 then

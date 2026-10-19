@@ -144,7 +144,9 @@ Position comes from the combo name ("corner" in the name means corner) unless yo
 
 **Speed:** each attempt takes about 4–6 seconds (most of it waiting for the dummy to get up). A 4-step combo takes around 100 attempts at 2 repeats, about 8 minutes; long combos take longer. Use 1 repeat and turn off the sweet-spot pass for a quick first pass.
 
-**Not supported yet:** jump-in starters (j.X as the first step) and Modern controls; those are skipped with a reason. Charge moves hold the charge direction automatically, which can turn a neutral normal right before them into a crouching one.
+**Jump-in starters** (j.X as the first step): the bot first measures your character's forward jump (from far apart: how long it's in the air and how far it goes), then looks for a spacing just short of that distance and the latest press during the jump that still hits as an air attack, i.e. as deep as possible. Then it profiles the rest of the combo from there. The distance and timing it found are saved in the combo, so later runs skip the search (unless **Replace existing profile** is ticked, or the saved one stops hitting). Cross-ups aren't searched for: the bot always jumps in from the front.
+
+**Not supported yet:** Modern controls; those combos are skipped with a reason. Charge moves hold the charge direction automatically, which can turn a neutral normal right before them into a crouching one.
 
 ## Fighter placement for your own practice
 

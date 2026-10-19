@@ -10,11 +10,16 @@ local MOVES = {
     ["2MK"] = { id = 130, btn = MK, dir = 2, startup = 7, active = 2, rec = 12, stun = 14, cancel = nil },
 }
 local STAND, CROUCH, DR_START, DR_RUN = 1, 2, 50, 51
+-- jumping: 4 frames of prejump, 36 in the air covering JUMP_DIST, 3 of landing.
+-- j.HP comes out in the air; it only reaches the opponent on the way down
+-- (air frame >= 20) and within 55 units, and hits harder the deeper it is.
+local JUMP_PRE, JUMP_AIR, JUMP_LAND, JUMP_DIST = 60, 61, 62, 160
+local AIRMOVE = { id = 140, btn = HP, startup = 7, active = 6 }
 local BUFFER = 4
 
 local function new_engine()
     return { t = 0, act = STAND, af = 0, inst_hit = false, opp_stun = 0, cc = 0, guard = 0,
-             buf = {}, held = 0, dir = 5, mv = nil, dr_t = 0 }
+             buf = {}, held = 0, dir = 5, mv = nil, dr_t = 0, x = 0, ox = 100, air = nil }
 end
 
 local function find_move(btn, dir)
@@ -42,6 +47,43 @@ local function engine_step(e, held, dir)
         if e.opp_stun == 0 then e.cc = 0 end
     end
 
+    -- jumping (its own little state machine)
+    if e.air or e.act == JUMP_PRE or e.act == JUMP_LAND then
+        e.af = e.af + 1
+        if e.act == JUMP_PRE then
+            if e.af >= 4 then e.act, e.af, e.air = JUMP_AIR, 0, { f = 0, atk = nil, sign = (e.ox >= e.x) and 1 or -1 } end
+        elseif e.act == JUMP_LAND then
+            if e.af >= 3 then e.act, e.af = STAND, 0 end
+        end
+        if e.air then
+            local a = e.air
+            a.f = a.f + 1
+            e.x = e.x + a.sign * JUMP_DIST / 36       -- direction fixed at takeoff
+            -- air attack
+            if not a.atk and rise & HP ~= 0 then a.atk = { af = 0, hit = false }; e.act, e.af = AIRMOVE.id, 0 end
+            if a.atk then
+                a.atk.af = a.atk.af + 1
+                e.af = a.atk.af
+                local k = a.atk.af
+                if not a.atk.hit and k >= AIRMOVE.startup and k < AIRMOVE.startup + AIRMOVE.active
+                    and a.f >= 20 and math.abs(e.ox - e.x) <= 55 then
+                    a.atk.hit = true
+                    e.opp_stun = 16 + (a.f - 20) * 2
+                    e.cc = e.cc + 1
+                    e.started_combo = true
+                end
+            end
+            if a.f >= 36 then e.air = nil; e.act, e.af, e.mv = JUMP_LAND, 0, nil end
+        end
+        local margin = 0
+        return {
+            t = e.t,
+            u = { act = e.act, af = e.af, margin = margin, held = held, dir = dir },
+            o = { stun = e.opp_stun, hitstop = 0, guard = e.guard },
+            cc = e.cc,
+        }
+    end
+
     -- advance current action
     e.af = e.af + 1
     local free, cancel_ok, dr_ok = false, false, false
@@ -57,6 +99,13 @@ local function engine_step(e, held, dir)
         if e.af >= 25 then free = true end
     else
         free = true
+    end
+
+    -- jump from neutral
+    if free and not e.mv and e.act ~= DR_RUN and (dir == 7 or dir == 8 or dir == 9) then
+        e.act, e.af, e.mv, e.buf = JUMP_PRE, 0, nil, {}
+        return { t = e.t, u = { act = e.act, af = 0, margin = 0, held = held, dir = dir },
+                 o = { stun = e.opp_stun, hitstop = 0, guard = e.guard }, cc = e.cc }
     end
 
     -- consume buffered input
@@ -109,4 +158,5 @@ end
 M.new_engine, M.engine_step, M.MOVES = new_engine, engine_step, MOVES
 M.LP, M.MP, M.HP, M.LK, M.MK, M.HK = LP, MP, HP, LK, MK, HK
 M.STAND, M.CROUCH, M.DR_START, M.DR_RUN = STAND, CROUCH, DR_START, DR_RUN
+M.JUMP_PRE, M.JUMP_AIR, M.JUMP_LAND, M.AIRMOVE, M.JUMP_DIST = JUMP_PRE, JUMP_AIR, JUMP_LAND, AIRMOVE, JUMP_DIST
 return M

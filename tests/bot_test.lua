@@ -139,6 +139,7 @@ local DIRS = { [0] = 5, [1] = 8, [2] = 2, [4] = 4, [8] = 6, [5] = 7, [6] = 1, [9
 MULTI = tonumber(os.getenv("BOT_MULTI") or "1")
 local function frame()
     P0.pl_input_new, P0.pl_sw_new = 0, 0           -- nobody touches the real pad
+    E.x, E.ox = P0.pos.x.v / 65536, P1.pos.x.v / 65536    -- teleports move the toy fighters
     P1.damage_time, P1.guard_time = E.opp_stun, E.guard
     team0.mComboCount = E.cc
     for _, h in ipairs(hooks) do
@@ -147,6 +148,7 @@ local function frame()
     end
     local raw = P0.pl_input_new & 15
     Toy.engine_step(E, P0.pl_sw_new & ~15, DIRS[raw] or 5)
+    P0.pos.x.v = math.floor(E.x * 65536)
     clock = clock + 1 / 60
     -- BOT_MULTI=n: n battle frames per rendered frame (research speed)
     FRAMES = (FRAMES or 0) + 1
@@ -223,6 +225,40 @@ until (FILES["ComboLab\\bot\\guile-exp.json"] and not (FILES["ComboLab\\status.j
 local r3 = FILES["ComboLab\\bot\\guile-exp.json"]
 print("experimental:", r3 and r3.ok, r3 and r3.reason, "attempts", r3 and r3.attempts)
 check(r3 and not r3.ok and tostring(r3.reason):find("experimental") and r3.attempts == 30, "experimental combo given up after 30 dry attempts")
+-- a jump-in starter: the bot measures its jump, finds a deep jump-in, then profiles the rest
+FILES["ComboLab\\combos\\guile-jump.json"] = {
+    id = "guile-jump", name = "Jump-in", fighter = "Guile", fighter_id = 18, hash = "jmp1",
+    notation = "j.HP, 2LP, 2LP",
+    steps = {
+        { label = "j.HP", sep = "start", kind = "hit", trigger = { type = "button", mask = 64, mode = "all" } },
+        { label = "2LP", sep = ",", kind = "hit", trigger = { type = "button", mask = 16, mode = "all" } },
+        { label = "2LP", sep = ",", kind = "hit", trigger = { type = "button", mask = 16, mode = "all" } },
+    },
+}
+FILES["ComboLab\\command.json"] = { seq = 5, cmd = "bot_start", ids = { "guile-jump" }, options = { reps = 1 } }
+n = 0
+repeat
+    for _ = 1, 600 do frame() end
+    n = n + 600
+until (FILES["ComboLab\\bot\\guile-jump.json"] and not (FILES["ComboLab\\status.json"].bot or {}).running) or n > 600000
+local r5 = FILES["ComboLab\\bot\\guile-jump.json"]
+print("jump-in:", r5 and r5.ok, r5 and r5.reason, "attempts", r5 and r5.attempts, "jump", r5 and r5.jump and (r5.jump.spacing .. "/" .. r5.jump.jd))
+if r5 and r5.windows then for k, w in pairs(r5.windows) do print(string.format("  jump-in step %d window %d..%d", k, w.E, w.L)) end end
+check(r5 and r5.ok, "jump-in combo profiled")
+check(r5 and r5.jump and r5.jump.jd == 33, "deepest jump-in found (press 33 frames after the jump)")
+check(r5 and r5.windows and r5.windows[2] and r5.windows[3], "windows for the steps after the jump-in")
+-- the page saves the jump-in into the combo; the next run skips the search
+FILES["ComboLab\\combos\\guile-jump.json"].bot = { jump = r5 and r5.jump }
+FILES["ComboLab\\bot\\guile-jump.json"] = nil
+FILES["ComboLab\\command.json"] = { seq = 6, cmd = "bot_start", ids = { "guile-jump" }, options = { reps = 1 } }
+n = 0
+repeat
+    for _ = 1, 600 do frame() end
+    n = n + 600
+until (FILES["ComboLab\\bot\\guile-jump.json"] and not (FILES["ComboLab\\status.json"].bot or {}).running) or n > 600000
+local r6 = FILES["ComboLab\\bot\\guile-jump.json"]
+print("jump-in again:", r6 and r6.ok, "attempts", r6 and r6.attempts)
+check(r6 and r6.ok and r6.attempts < r5.attempts, "saved jump-in reused (quicker)")
 print(fail == 0 and "bot test OK" or (fail .. " failed"))
 local fo = os.getenv("BOT_OUT")
 if fo then
