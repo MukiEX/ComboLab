@@ -314,6 +314,20 @@ function Bot:on_result(res)
             table.concat(parts, " ")))
     end
 
+    -- experimental combos (not confirmed to work) get a limited number of
+    -- tries: give up after `experimental_limit` attempts in a row with nothing working
+    if self.opts.experimental_limit and c.combo.experimental == true then
+        local success = res and res.ok or false
+        if c.phase == "A" then
+            success = true
+            for j = 1, c.k do if not ok_at(j) then success = false end end
+        end
+        c.dry = success and 0 or (c.dry or 0) + 1
+        local lim = math.max(1, tonumber(self.opts.experimental_limit) or 30)
+        if c.dry >= lim then
+            return self:fail_combo(string.format("experimental combo: no successful attempt in %d tries, gave up", lim))
+        end
+    end
     if c.phase == "A" then
         local k = c.k
         local prev_ok = true

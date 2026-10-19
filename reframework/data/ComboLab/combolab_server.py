@@ -188,7 +188,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "bad dir"})
             os.makedirs(d, exist_ok=True)
             names = sorted(n for n in os.listdir(d) if n.endswith(".json") and os.path.isfile(os.path.join(d, n)))
-            return self._json(200, {"files": names})
+            mtimes = {}
+            for n in names:
+                try:
+                    mtimes[n] = int(os.path.getmtime(os.path.join(d, n)) * 1000)
+                except OSError:
+                    pass
+            return self._json(200, {"files": names, "mtimes": mtimes})
         if path == "/api/file":
             p = safe_path(q.get("path"))
             if p is None:

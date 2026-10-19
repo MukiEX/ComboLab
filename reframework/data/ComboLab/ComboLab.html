@@ -15,6 +15,7 @@
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
   --c-early: #3987e5; --c-late: #d95926; --c-wrong: #199e70; --c-missed: #c98500; --c-spam: #d55181; --c-other: #9085e9;
   --hit: #3987e5; --move: #c98500;
+  --prof-0: rgb(92,30,30); --prof-1: rgb(24,92,44);
   --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -27,6 +28,7 @@
     --firm: #2a78d6; --soft: #9ec5f4; --sweet: #0d366b;
     --c-early: #2a78d6; --c-late: #eb6834; --c-wrong: #1baf7a; --c-missed: #eda100; --c-spam: #e87ba4; --c-other: #6250d6;
     --hit: #2a78d6; --move: #eda100;
+    --prof-0: rgb(245,208,204); --prof-1: rgb(196,234,204);
   }
 }
 :root[data-theme="light"] {
@@ -37,6 +39,7 @@
   --firm: #2a78d6; --soft: #9ec5f4; --sweet: #0d366b;
   --c-early: #2a78d6; --c-late: #eb6834; --c-wrong: #1baf7a; --c-missed: #eda100; --c-spam: #e87ba4; --c-other: #6250d6;
   --hit: #2a78d6; --move: #eda100;
+  --prof-0: rgb(245,208,204); --prof-1: rgb(196,234,204);
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 var(--sans); }
@@ -48,8 +51,6 @@ header h1 span { color: var(--muted); font-weight: 400; }
 .pagenav { display: flex; gap: 4px; }
 .pagenav button { background: none; border: none; padding: 5px 11px; border-radius: 7px; cursor: pointer; color: var(--ink-2); }
 .pagenav button.on { background: var(--surface-2); color: var(--ink); }
-#mainHub { display: block; max-width: 820px; }
-#mainHub .card + .card { margin-top: 16px; }
 .hubstate { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .hubstate .big { font-size: 16px; font-weight: 600; }
 .pills { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
@@ -130,13 +131,42 @@ table.t td.m { font-family: var(--mono); }
 .botres { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--grid); font-size: 13px; align-items: baseline; flex-wrap: wrap; }
 .botres b { min-width: 16px; }
 .hidden { display: none !important; }
+#paneProfiling, #paneTraining { margin-top: 16px; }
+main.single { display: block; max-width: 1100px; }
+main.single > .card + .card { margin-top: 16px; }
+.combotitle { font-size: 18px; font-weight: 600; }
+.subtabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.subtabs button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 11px 14px; border-radius: 9px; border: 1px solid var(--ring); background: var(--surface-2); cursor: pointer; text-align: left; }
+.subtabs button b { font-size: 15px; }
+.subtabs button span { font-size: 12px; color: var(--muted); }
+.subtabs button.on { border-color: var(--accent); background: var(--surface-3); box-shadow: inset 0 -3px 0 var(--accent); }
+.meter { height: 10px; border-radius: 5px; background: var(--prof-0); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--prof-1); transition: width .3s; }
+.lib-item.prof { margin-bottom: 4px; border-color: transparent; position: relative; padding-right: 44px; }
+.lib-item.prof .pc { position: absolute; right: 9px; top: 7px; font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.lib-item.prof:hover { filter: brightness(1.15); }
+.lib-item.prof.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.exptag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; border: 1px dashed var(--warning); color: var(--warning); white-space: nowrap; }
+.chargrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.chargrid button { padding: 9px 11px; border-radius: 8px; border: 1px solid var(--ring); background: var(--surface-2); cursor: pointer; text-align: left; display: flex; justify-content: space-between; gap: 6px; }
+.chargrid button.none { opacity: .5; }
+.chargrid button.on { border-color: var(--accent); background: var(--surface-3); }
+.chargrid button small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.dbrow { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--grid); }
+.dbrow .pcb { font-size: 12px; text-align: center; padding: 3px 0; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.dbrow .nm { font-weight: 500; }
+.dbrow small { display: block; color: var(--muted); font: 12px/1.35 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dbsec { font-size: 12px; color: var(--ink-2); font-weight: 600; margin: 14px 0 2px; text-transform: uppercase; letter-spacing: .06em; }
+.dbsec.exp { color: var(--warning); }
+details.more { margin-top: 12px; }
+details.more > summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
 kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background: var(--surface-3); border: 1px solid var(--ring); }
 </style>
 </head>
 <body>
 <header>
   <h1>ComboLab <span>SF6 combo timing</span></h1>
-  <nav class="pagenav"><button data-page="trainer" class="on">Trainer</button><button data-page="hub">Hub</button></nav>
+  <nav class="pagenav"><button data-page="training" class="on">Combo Training</button><button data-page="db">Combo Database</button><button data-page="hub">Hub Sync</button></nav>
   <div class="pills">
     <span class="pill" id="pillFolder"><span class="dot"></span><span>No folder</span></span>
     <span class="pill" id="pillGame"><span class="dot"></span><span>Game: unknown</span></span>
@@ -145,146 +175,208 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
   </div>
 </header>
 
-<main id="mainHub" hidden>
-  <section class="card" id="hubCard"></section>
-  <section class="card" id="hubConnect"></section>
-</main>
-<main id="mainTrainer">
+<!-- ============================== Combo Training ============================== -->
+<main id="mainTraining">
   <aside>
-    <section class="card">
-      <h2>Data folder</h2>
-      <div id="folderBox"></div>
-    </section>
     <section class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
         <h2 style="margin:0">Combos</h2>
-        <span class="row" style="gap:6px"><button class="btn small" id="btnImport">Import list</button><button class="btn small" id="btnNew">+ New</button></span>
+        <button class="btn small" id="btnToDb" title="Add, edit or remove combos">Edit list</button>
       </div>
-      <select id="libFilter" style="width:100%;margin-bottom:10px"></select>
+      <select id="trainFighter" style="width:100%;margin-bottom:10px"></select>
       <div id="library"><p class="muted">No combos yet.</p></div>
+      <div class="muted" style="font-size:11.5px;margin-top:8px">Colour shows how far each combo is profiled: red = nothing yet, green = every window and sweet spot found. Clicking one loads it in game.</div>
     </section>
     <section class="card">
       <h2>In-game keys</h2>
       <div class="ink2" style="font-size:13px;line-height:1.9">
-        <kbd>F5</kbd> Develop / Train<br>
+        <kbd>F5</kbd> Profiling / Training<br>
         <kbd>F6</kbd> next combo<br>
         <kbd>F7</kbd> detail table<br>
         <kbd>F8</kbd> spam blocker<br>
         <kbd>F9</kbd> hide overlay<br>
-        <kbd>F10</kbd> training bot<br>
-        <kbd>F11</kbd> Train view (bar / notes)<br>
-        <span class="muted">Overlay only shows in Training mode.</span>
+        <kbd>F10</kbd> research bot<br>
+        <kbd>F11</kbd> Train view<br>
       </div>
     </section>
   </aside>
 
   <div>
-    <section class="card hidden" id="importCard">
-      <h2>Import a combo list</h2>
-      <div class="row" style="align-items:flex-end;margin-bottom:10px">
-        <label class="f">Character <select id="impFighter"></select></label>
-        <label class="f">Controls <select id="impControl"><option value="classic">Classic</option><option value="modern">Modern</option></select></label>
+    <section class="card" id="comboHead">
+      <div class="row" style="align-items:flex-start">
+        <div class="grow">
+          <div class="combotitle" id="ctTitle">Pick a combo</div>
+          <div class="muted" id="ctSub" style="font-size:12.5px"></div>
+        </div>
+        <label class="switch" style="font-size:12.5px"><input type="checkbox" id="optP2"> I'm on the 2P side</label>
       </div>
-      <textarea class="notation" id="impText" rows="8" spellcheck="false" style="font-size:15px" placeholder="# Lights&#10;Light confirm | 2LK, 5LP, 5LK > 236MK&#10;2LK, 2LP, 2LP > SA1&#10;# Drive Rush&#10;DR > 2LK, 5MP~MK > 236MK"></textarea>
-      <div class="muted" style="font-size:12px;margin-top:6px">One combo per line. <span style="font-family:var(--mono)">Name | notation</span> or just the notation. A line starting with <span style="font-family:var(--mono)">#</span> starts a section that prefixes the names below it. Anything in (parentheses) is ignored by the parser.</div>
-      <div class="row" style="margin-top:12px"><button class="btn primary" id="btnDoImport">Import</button><button class="btn" id="btnCancelImport">Close</button><span id="impMsg" class="ink2" style="font-size:13px"></span></div>
+      <div class="chips" id="selChips"></div>
+      <div class="subtabs">
+        <button data-sub="profiling" class="on"><b>Profiling</b><span>find the windows · game in Develop</span></button>
+        <button data-sub="training"><b>Training</b><span>practise against them · game in Train</span></button>
+      </div>
+      <div id="loadMsg" class="muted" style="font-size:12.5px;margin-top:8px"></div>
     </section>
 
-    <section class="card" id="editor">
-      <h2>Combo</h2>
-      <div class="row" style="align-items:flex-end">
-        <label class="f">Character
-          <select id="fighter"></select>
-        </label>
-        <label class="f">Controls
-          <select id="control"><option value="classic">Classic</option><option value="modern">Modern</option></select>
-        </label>
-        <label class="f grow">Name
-          <input type="text" id="name" placeholder="e.g. Midscreen DR BnB">
-        </label>
-      </div>
-      <label class="f" style="margin-top:12px">Notation
-        <textarea class="notation" id="notation" rows="2" spellcheck="false" placeholder="2LP > 2LP, 5LK > DR > 5LP, 5HP > DR > 5HK, 5MP~4HP > [2]8HK"></textarea>
-      </label>
-      <div class="muted" style="font-size:12px;margin-top:6px">
-        <b class="ink2">&gt;</b> cancel &nbsp; <b class="ink2">,</b> link &nbsp; <b class="ink2">~</b> chain / target combo &nbsp;·&nbsp;
-        numpad directions, <span style="font-family:var(--mono)">[2]8</span> charge, <span style="font-family:var(--mono)">j.HP</span> / <span style="font-family:var(--mono)">cr.MK</span> ok, <span style="font-family:var(--mono)">DR DI 66 SA1</span>
-      </div>
-      <div class="chips" id="chips"></div>
-      <div id="override"></div>
-      <div class="row" style="margin-top:16px">
-        <button class="btn primary" id="btnDevelop">Develop in game</button>
-        <button class="btn" id="btnTrain">Train in game</button>
-        <button class="btn" id="btnSave">Save</button>
-        <span class="grow"></span>
-        <button class="btn" id="btnExport">Export JSON</button>
-        <button class="btn danger" id="btnDelete">Delete</button>
-      </div>
-      <div id="saveMsg" class="muted" style="font-size:12.5px;margin-top:8px"></div>
-    </section>
+    <!-- ---------------- Profiling ---------------- -->
+    <div id="paneProfiling">
+      <section class="card">
+        <div class="row" style="align-items:center;gap:16px">
+          <div class="grow">
+            <div class="meter"><i id="profMeter"></i></div>
+            <div id="profPct" class="ink2" style="font-size:13px;margin-top:6px"></div>
+          </div>
+<span class="row" style="gap:8px;flex-wrap:nowrap">
+          <button class="btn primary" id="btnDevelop">Profile in game</button>
+          <button class="btn" id="btnResetProfile">Reset profile</button>
+          </span>
+        </div>
+        <div class="row" style="gap:22px;margin-top:14px">
+          <label class="switch"><input type="checkbox" id="optPredict" checked> Predict windows from frame data</label>
+          <label class="switch"><input type="checkbox" id="optPlace" checked> Corner combos: place fighters in the corner</label>
+          <label class="switch"><input type="checkbox" id="optDetail"> Detail table in game</label>
+          <label class="switch"><input type="checkbox" id="optIgnoreSpam" checked> Ignore spammed samples</label>
+        </div>
+      </section>
 
-    <section class="card">
-      <h2>Session options</h2>
-      <div class="row" style="gap:22px">
-        <label class="switch"><input type="checkbox" id="optSpam"> Spam blocker <span class="muted">(Train)</span></label>
-        <label class="switch"><input type="checkbox" id="optRhythm" checked> Rhythm guide <span class="muted">(Train)</span></label>
-        <label class="switch"><input type="checkbox" id="optDemo" checked> Cadence preview</label>
-        <label class="switch"><input type="checkbox" id="optPredict" checked> Predict windows from frame data</label>
-        <label class="switch"><input type="checkbox" id="optPlace" checked> Corner combos: place fighters in the corner</label>
-        <label class="switch"><input type="checkbox" id="optLearn"> Keep learning in Train</label>
-        <label class="switch"><input type="checkbox" id="optDetail"> Detail table</label>
-        <label class="switch"><input type="checkbox" id="optIgnoreSpam" checked> Ignore spammed samples</label>
-        <label class="switch"><input type="checkbox" id="optP2"> I'm on the 2P side</label>
-      </div>
-      <div class="row" style="margin-top:12px;gap:22px">
-        <label class="f">Overlay scale <input type="range" id="optScale" min="0.5" max="2" step="0.05" value="1"></label>
-        <label class="f">Overlay height <input type="range" id="optY" min="0.02" max="0.9" step="0.005" value="0.25"></label>
-        <label class="f">Train view <select id="optView"><option value="bar">Bar</option><option value="notes">Spearmint Twintails (notes)</option><option value="both">Bar + notes</option><option value="fix">Strike Fixation (lanes)</option></select></label>
-        <label class="f">Strike Fixation lanes <select id="optFixPos"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></label>
-        <label class="f">Note flight <input type="range" id="optApproach" min="18" max="72" step="2" value="36"></label>
-        <label class="f">Note colours <select id="optPalette"><option value="classic">Classic (red / white / blue)</option><option value="sf6">SF6 (blue / yellow / red)</option></select></label>
-        <label class="switch"><input type="checkbox" id="optFlip"> Kicks from the left</label>
-        <label class="switch"><input type="checkbox" id="optArrows"> Motion arrows <span class="muted">(623 as an arrow)</span></label>
-      </div>
-      <div class="row" style="margin-top:12px;gap:22px;align-items:flex-end">
-        <label class="switch"><input type="checkbox" id="optSong"> Song mode <span class="muted">(count-in, fixed timeline)</span></label>
-        <label class="switch"><input type="checkbox" id="optFollow"> Follow my hits</label>
-        <label class="f">Song note flight <input type="range" id="optSongApproach" min="40" max="150" step="5" value="80"></label>
-        <label class="f">Count-in beat <input type="range" id="optSongBeat" min="15" max="60" step="1" value="30"></label>
-        <span class="grow"></span>
-        <button class="btn" id="btnOptions">Apply to game</button>
-      </div>
-    </section>
+      <section class="card" id="botCard">
+        <h2>Research bot</h2>
+        <div class="ink2" style="font-size:13px;margin-bottom:12px">Plays combos by itself in Training mode and sweeps every step frame by frame, filling in exact windows and sweet spots. Before starting: dummy on <b>No guard</b>, Drive and Super gauges on <b>infinite / auto-recover</b>, life auto-recover on, Counter setting on <b>Punish Counter</b> for PC combos, and keep your hands off the controller (touching it stops the bot). Playing offline is safest.</div>
+        <div class="row" style="gap:18px;align-items:flex-end">
+          <label class="f">Repeats per frame <select id="botReps"><option value="1">1 (fast)</option><option value="2" selected>2</option><option value="3">3 (thorough)</option></select></label>
+          <label class="f">Position <select id="botPos"><option value="">Auto (from name)</option><option value="mid">Midscreen</option><option value="corner">Corner</option></select></label>
+          <label class="f">Extra spacing <input type="range" id="botSpacing" min="0" max="200" step="5" value="0"></label>
+          <label class="switch"><input type="checkbox" id="botSweet" checked> Sweet-spot pass</label>
+          <label class="switch"><input type="checkbox" id="botReset"> Replace existing profile</label>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn primary" id="btnBotOne">Profile this combo</button>
+          <button class="btn" id="btnBotAll">Profile all combos for this character</button>
+          <button class="btn danger" id="btnBotStop">Stop</button>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:8px">“All combos” skips anything already at 100% and gives up on an <b>experimental</b> combo after 30 attempts in a row without a success.</div>
+        <div id="botStatus" style="margin-top:14px"></div>
+      </section>
 
-    <section class="card" id="botCard">
-      <h2>Training bot</h2>
-      <div class="ink2" style="font-size:13px;margin-bottom:12px">Plays combos by itself in Training mode and sweeps every step frame by frame, filling in exact windows and sweet spots. Before starting: dummy on <b>No guard</b>, Drive and Super gauges on <b>infinite / auto-recover</b>, life auto-recover on, Counter setting on <b>Punish Counter</b> for PC combos, and keep your hands off the controller (touching it stops the bot). Playing offline is safest.</div>
-      <div class="row" style="gap:18px;align-items:flex-end">
-        <label class="f">Repeats per frame <select id="botReps"><option value="1">1 (fast)</option><option value="2" selected>2</option><option value="3">3 (thorough)</option></select></label>
-        <label class="f">Position <select id="botPos"><option value="">Auto (from name)</option><option value="mid">Midscreen</option><option value="corner">Corner</option></select></label>
-        <label class="f">Extra spacing <input type="range" id="botSpacing" min="0" max="200" step="5" value="0"></label>
-        <label class="switch"><input type="checkbox" id="botSweet" checked> Sweet-spot pass</label>
-        <label class="switch"><input type="checkbox" id="botReset"> Replace existing profile</label>
-      </div>
-      <div class="row" style="margin-top:14px">
-        <button class="btn primary" id="btnBotOne">Profile this combo</button>
-        <button class="btn" id="btnBotAll">Profile all combos for this character</button>
-        <button class="btn danger" id="btnBotStop">Stop</button>
-      </div>
-      <div id="botStatus" style="margin-top:14px"></div>
-    </section>
+      <section class="card">
+        <h2>Timing profile</h2>
+        <div id="tabProfile"></div>
+      </section>
+    </div>
 
-    <section class="card">
-      <div class="tabs">
-        <button class="tab on" data-tab="profile">Timing profile</button>
-        <button class="tab" data-tab="train">Training history</button>
-        <span class="grow"></span>
-        <button class="btn small" id="btnResetProfile" style="margin:6px 0">Reset profile</button>
-      </div>
-      <div id="tabProfile"></div>
-      <div id="tabTrain" class="hidden"></div>
-    </section>
+    <!-- ---------------- Training ---------------- -->
+    <div id="paneTraining" hidden>
+      <section class="card">
+        <div class="row" style="align-items:center;gap:16px">
+          <div id="todayBox" style="flex:1 1 280px;min-width:0"></div>
+<span class="row" style="gap:8px;flex-wrap:nowrap">
+          <button class="btn primary" id="btnTrain">Train in game</button>
+          <button class="btn" id="btnResetStats" title="Start today's count over (history stays)">Reset today</button>
+          </span>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Session options</h2>
+        <div class="row" style="gap:22px">
+          <label class="f">Train view <select id="optView"><option value="bar">Bar</option><option value="notes">Spearmint Twintails (notes)</option><option value="both">Bar + notes</option><option value="fix">Strike Fixation (lanes)</option></select></label>
+          <label class="switch"><input type="checkbox" id="optSong" checked> Song mode <span class="muted">(count-in, fixed timeline)</span></label>
+          <label class="switch"><input type="checkbox" id="optArrows" checked> Motion arrows <span class="muted">(623 as an arrow)</span></label>
+          <label class="switch"><input type="checkbox" id="optSpam"> Spam blocker</label>
+          <label class="switch"><input type="checkbox" id="optRhythm" checked> Rhythm guide</label>
+          <label class="switch"><input type="checkbox" id="optDemo" checked> Cadence preview</label>
+          <label class="switch"><input type="checkbox" id="optLearn"> Keep learning windows</label>
+        </div>
+        <details class="more"><summary>Overlay and notes</summary>
+          <div class="row" style="margin-top:10px;gap:22px;align-items:flex-end">
+            <label class="f">Overlay scale <input type="range" id="optScale" min="0.5" max="2" step="0.05" value="1"></label>
+            <label class="f">Overlay height <input type="range" id="optY" min="0.02" max="0.9" step="0.005" value="0.25"></label>
+            <label class="f">Strike Fixation lanes <select id="optFixPos"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></label>
+            <label class="f">Note flight <input type="range" id="optApproach" min="18" max="72" step="2" value="36"></label>
+            <label class="f">Note colours <select id="optPalette"><option value="classic">Classic (red / white / blue)</option><option value="sf6">SF6 (blue / yellow / red)</option></select></label>
+            <label class="switch"><input type="checkbox" id="optFlip"> Kicks from the left</label>
+          </div>
+          <div class="row" style="margin-top:12px;gap:22px;align-items:flex-end">
+            <label class="switch"><input type="checkbox" id="optFollow"> Song: follow my hits</label>
+            <label class="f">Song note flight <input type="range" id="optSongApproach" min="40" max="150" step="5" value="80"></label>
+            <label class="f">Count-in beat <input type="range" id="optSongBeat" min="15" max="60" step="1" value="30"></label>
+          </div>
+        </details>
+        <div id="optMsg" class="muted" style="font-size:12px;margin-top:8px">Changes go to the game as you make them.</div>
+      </section>
+      <section class="card">
+        <h2>Training history</h2>
+        <div id="tabTrain"></div>
+      </section>
+    </div>
   </div>
+</main>
+
+<!-- ============================== Combo Database ============================== -->
+<main id="mainDb" class="single" hidden>
+  <section class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <h2 style="margin:0">Characters</h2>
+      <span class="row" style="gap:6px"><button class="btn small" id="btnImport">Import list</button><button class="btn small primary" id="btnNew">+ New combo</button></span>
+    </div>
+    <div class="chargrid" id="charGrid"></div>
+  </section>
+
+  <section class="card hidden" id="importCard">
+    <h2>Import a combo list</h2>
+    <div class="row" style="align-items:flex-end;margin-bottom:10px">
+      <label class="f">Character <select id="impFighter"></select></label>
+      <label class="f">Controls <select id="impControl"><option value="classic">Classic</option><option value="modern">Modern</option></select></label>
+      <label class="switch"><input type="checkbox" id="impExperimental" checked> Experimental (not checked yet)</label>
+    </div>
+    <textarea class="notation" id="impText" rows="8" spellcheck="false" style="font-size:15px" placeholder="# Lights&#10;Light confirm | 2LK, 5LP, 5LK > 236MK&#10;2LK, 2LP, 2LP > SA1&#10;# Drive Rush&#10;DR > 2LK, 5MP~MK > 236MK"></textarea>
+    <div class="muted" style="font-size:12px;margin-top:6px">One combo per line. <span style="font-family:var(--mono)">Name | notation</span> or just the notation. A line starting with <span style="font-family:var(--mono)">#</span> starts a section that prefixes the names below it. Anything in (parentheses) is ignored by the parser.</div>
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="btnDoImport">Import</button><button class="btn" id="btnCancelImport">Close</button><span id="impMsg" class="ink2" style="font-size:13px"></span></div>
+  </section>
+
+  <section class="card hidden" id="editor">
+    <h2 id="edTitle">New combo</h2>
+    <div class="row" style="align-items:flex-end">
+      <label class="f">Character
+        <select id="fighter"></select>
+      </label>
+      <label class="f">Controls
+        <select id="control"><option value="classic">Classic</option><option value="modern">Modern</option></select>
+      </label>
+      <label class="f grow">Name
+        <input type="text" id="name" placeholder="e.g. Midscreen DR BnB  (Section: name groups it)">
+      </label>
+    </div>
+    <label class="f" style="margin-top:12px">Notation
+      <textarea class="notation" id="notation" rows="2" spellcheck="false" placeholder="2LP > 2LP, 5LK > DR > 5LP, 5HP > DR > 5HK, 5MP~4HP > [2]8HK"></textarea>
+    </label>
+    <div class="muted" style="font-size:12px;margin-top:6px">
+      <b class="ink2">&gt;</b> cancel &nbsp; <b class="ink2">,</b> link &nbsp; <b class="ink2">~</b> chain / target combo &nbsp;·&nbsp;
+      numpad directions, <span style="font-family:var(--mono)">[2]8</span> charge, <span style="font-family:var(--mono)">j.HP</span> / <span style="font-family:var(--mono)">cr.MK</span> ok, <span style="font-family:var(--mono)">DR DI 66 SA1</span>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div id="override"></div>
+    <label class="switch" style="margin-top:14px"><input type="checkbox" id="edExperimental"> Experimental <span class="muted">(not confirmed to work yet; verified automatically after its first clean run)</span></label>
+    <div class="row" style="margin-top:16px">
+      <button class="btn primary" id="btnSave">Save</button>
+      <button class="btn" id="btnCancelEdit">Close</button>
+      <span class="grow"></span>
+      <button class="btn" id="btnExport">Export JSON</button>
+      <button class="btn danger" id="btnDelete">Delete</button>
+    </div>
+    <div id="saveMsg" class="muted" style="font-size:12.5px;margin-top:8px"></div>
+  </section>
+
+  <section class="card" id="dbList"></section>
+</main>
+
+<!-- ============================== Hub Sync ============================== -->
+<main id="mainHub" class="single" hidden>
+  <section class="card">
+    <h2>Data folder</h2>
+    <div id="folderBox"></div>
+  </section>
+  <section class="card" id="hubCard"></section>
+  <section class="card" id="hubConnect"></section>
 </main>
 <div class="tip" id="tip"></div>
 
@@ -413,7 +505,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.12.1";
+const PAGE_VERSION = "1.13.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -588,6 +680,11 @@ const FS = {
     const d = await this.dir(parts, false);
     await d.removeEntry(name);
   },
+  async stat(dirPath) {
+    const out = {};
+    try { const d = await this.dir(dirPath.split("/"), true); for await (const [n, h] of d.entries()) if (h.kind === "file" && n.endsWith(".json")) out[n] = (await h.getFile()).lastModified; } catch (e) { return null; }
+    return out;
+  },
   async list(dirPath) {
     const out = [];
     try { const d = await this.dir(dirPath.split("/"), true); for await (const [n, h] of d.entries()) if (h.kind === "file" && n.endsWith(".json")) out.push(n); } catch (e) {}
@@ -635,18 +732,28 @@ if (SERVER) {
     async list(dir) {
       try { const r = await api("/api/list?dir=" + encodeURIComponent(dir)); return r.ok ? (await r.json()).files : []; } catch (e) { return []; }
     },
+    async stat(dir) {
+      try { const r = await api("/api/list?dir=" + encodeURIComponent(dir)); const d = r.ok ? await r.json() : null; return d && d.mtimes ? d.mtimes : null; } catch (e) { return null; }
+    },
   });
 }
 
 /* ===================== app state ===================== */
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem("combolab_" + k); return v == null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("combolab_" + k, v); } catch (e) {} },
+};
 const st = {
   combos: {}, sel: null, draft: null, overrideIdx: null,
   status: null, statusMtime: 0, profile: null, profileMtime: 0, session: null, sessionMtime: 0,
-  tab: "profile",
+  page: "training", sub: LS.get("sub", "profiling") === "training" ? "training" : "profiling",
+  trainFighter: +LS.get("train_fighter", 0) || null, dbFighter: null,
+  optsSynced: false, modeSentAt: 0,
 };
+const prof = {};   // combo id -> {mtime, p, wins, winOf, sweets, sweetOf, ok}
 
-function newDraft() {
-  return {id: null, name: "", fighter_id: 18, control: "classic", notation: "", overrides: {}, version: 0, notes: ""};
+function newDraft(fid) {
+  return {id: null, name: "", fighter_id: fid || 18, control: "classic", notation: "", overrides: {}, version: 0, notes: "", experimental: true};
 }
 
 function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "combo"; }
@@ -657,13 +764,51 @@ function buildCombo(d) {
   return {steps, hash};
 }
 
+const modeOf = sub => sub === "training" ? "train" : "develop";
+const subOf = mode => mode === "train" ? "training" : "profiling";
+const shortName = c => { const nm = String(c.name || c.id); return nm.includes(": ") ? nm.slice(nm.indexOf(": ") + 2) : nm; };
+const sectionOf = c => { const nm = String(c.name || ""); return nm.includes(": ") ? nm.slice(0, nm.indexOf(": ")) : ""; };
+const combosFor = fid => Object.values(st.combos).filter(c => +c.fighter_id === +fid);
+const profColor = p => `color-mix(in srgb, var(--prof-1) ${Math.round(100 * Math.max(0, Math.min(1, p || 0)))}%, var(--prof-0))`;
+const pctText = p => Math.floor(100 * (p || 0) + 1e-9) + "%";
+
+/* ===================== how far a combo is profiled =====================
+   Per timed step (every step after the first): the window is worth 2/3 and the
+   sweet spot 1/3. The last step has no next step, so no sweet spot: its window
+   counts in full. A window is complete once it has 3+ clean presses and a
+   failed press right outside both edges (E-1 and L+1). Predicted-only windows
+   count for nothing. */
+function profilePct(P, c) {
+  const z = {p: 0, wins: 0, winOf: Math.max(0, (c?.steps?.length || 1) - 1), sweets: 0, sweetOf: Math.max(0, (c?.steps?.length || 2) - 2), ok: 0};
+  if (!P || !c || !P.steps || P.combo_hash !== c.hash) return z;
+  z.ok = (P.successes || 0) + (P.train_successes || 0);
+  const W = arr(P.windows), S = arr(P.steps), N = c.steps.length;
+  if (N < 2) { z.p = z.ok > 0 ? 1 : 0; return z; }
+  let tot = 0;
+  for (let i = 1; i < N; i++) {
+    const w = W[i] || {}, sm = arr(S[i] && S[i].samples);
+    let wp = 0;
+    if (w.n && !w.pred) {
+      const failAt = f => sm.some(x => x.res !== "ok" && x.p === f);
+      wp = 0.4 * Math.min(w.n, 3) / 3 + (failAt(w.E - 1) ? 0.3 : 0) + (failAt(w.L + 1) ? 0.3 : 0);
+    }
+    if (wp > 0.999) z.wins++;
+    if (i === N - 1) { tot += wp; continue; }
+    const sp = w.sweet_lo != null ? 1 : Math.min(w.sweet_n || 0, 8) / 8 * 0.8;
+    if (w.sweet_lo != null) z.sweets++;
+    tot += (2 / 3) * wp + (1 / 3) * sp;
+  }
+  z.p = tot / (N - 1);
+  return z;
+}
+
 /* ===================== rendering: header / folder / library ===================== */
 function renderFolder() {
   const box = $("folderBox");
   const pf = $("pillFolder");
   if (FS.server) {
     if (FS.ok) {
-      box.innerHTML = `<div class="ink2" style="font-size:13px">Connected to the ComboLab server at <b style="color:var(--ink)">${esc(location.host)}</b></div>`;
+      box.innerHTML = `<div class="ink2" style="font-size:13px">Connected to the ComboLab server at <b style="color:var(--ink)">${esc(location.host)}</b>${FS.root && FS.root.name ? `, data in <span style="font-family:var(--mono)">${esc(FS.root.name)}</span>` : ""}</div>`;
       pf.innerHTML = `<span class="dot on"></span><span>Server</span>`;
     } else {
       box.innerHTML = `<div class="ink2" style="font-size:13px;margin-bottom:10px">Can't reach the ComboLab server.</div><button class="btn primary" id="btnPick">Retry</button>`;
@@ -673,7 +818,7 @@ function renderFolder() {
     return;
   }
   if (!FS.supported) {
-    box.innerHTML = `<div class="notice">This browser can't open local folders. Use <b>Chrome</b> or <b>Edge</b> for the live link. Here you can still build a combo and use <b>Export JSON</b>, then drop the file into <code>reframework/data/ComboLab/combos</code>.</div>`;
+    box.innerHTML = `<div class="notice">This browser can't open local folders. Use <b>Chrome</b> or <b>Edge</b> for the live link. Here you can still build a combo in Combo Database and use <b>Export JSON</b>, then drop the file into <code>reframework/data/ComboLab/combos</code>.</div>`;
     pf.innerHTML = `<span class="dot warn"></span><span>Export only</span>`;
     return;
   }
@@ -690,60 +835,67 @@ function renderFolder() {
   const bp = $("btnPick"); if (bp) bp.onclick = async () => { try { if (await FS.pick()) await afterConnect(); } catch (e) {} renderFolder(); };
   const br = $("btnReconnect"); if (br) br.onclick = async () => { await FS.restore(true); if (FS.ok) await afterConnect(); renderFolder(); };
 }
+$("pillFolder").style.cursor = "pointer";
+$("pillFolder").onclick = () => showPage("hub");
 
-// Sidebar filter: "follow" = the character picked in the editor, "all", or a fighter id.
-let libFilter = (() => { try { return localStorage.getItem("combolab_libfilter") || "follow"; } catch (e) { return "follow"; } })();
-const libOpen = {};   // remembered open/closed state of section groups
-
-function renderLibFilter() {
-  const counts = {};
-  for (const c of Object.values(st.combos)) { const k = String(c.fighter_id || 0); counts[k] = (counts[k] || 0) + 1; }
-  const opts = [`<option value="follow">Character in editor</option>`, `<option value="all">All characters</option>`];
-  Object.keys(counts).map(Number).sort((a, b) => (FIGHTERS[a] || "~").localeCompare(FIGHTERS[b] || "~"))
-    .forEach(id => opts.push(`<option value="${id}">${esc(FIGHTERS[id] || "Other")} (${counts[id]})</option>`));
-  const sel = $("libFilter");
-  sel.innerHTML = opts.join("");
-  sel.value = libFilter;
-  if (sel.value !== libFilter) { libFilter = "follow"; sel.value = "follow"; }
+// Groups a character's combos: sections from "Section: name", BnB first,
+// Experimental (unverified) combos last in a section of their own.
+function groupCombos(list) {
+  const secs = {}, order = [];
+  const exp = [];
+  for (const c of list.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
+    if (c.experimental) { exp.push(c); continue; }
+    const sec = sectionOf(c);
+    if (!secs[sec]) { secs[sec] = []; order.push(sec); }
+    secs[sec].push(c);
+  }
+  order.sort((a, b) => (!a - !b) || (/^bnb/i.test(b) - /^bnb/i.test(a)) || a.localeCompare(b));
+  const out = order.map(sec => ({name: sec, list: secs[sec], exp: false}));
+  if (exp.length) out.push({name: "Experimental", list: exp, exp: true});
+  return out;
 }
 
+function fighterCounts() {
+  const counts = {};
+  for (const c of Object.values(st.combos)) { const k = String(c.fighter_id || 0); counts[k] = (counts[k] || 0) + 1; }
+  return counts;
+}
+const byFighterName = (a, b) => (FIGHTERS[a] || "~").localeCompare(FIGHTERS[b] || "~");
+
+function renderTrainFighter() {
+  const counts = fighterCounts();
+  const ids = Object.keys(counts).map(Number).sort(byFighterName);
+  if (!st.trainFighter || !counts[st.trainFighter]) {
+    const cur = st.sel && st.combos[st.sel];
+    st.trainFighter = (cur && +cur.fighter_id) || (st.status && counts[st.status.fighter_id] && st.status.fighter_id) || ids[0] || null;
+  }
+  const sel = $("trainFighter");
+  sel.innerHTML = ids.length ? ids.map(id => `<option value="${id}">${esc(FIGHTERS[id] || "Other")} (${counts[id]})</option>`).join("") : `<option value="">No combos yet</option>`;
+  if (st.trainFighter) sel.value = st.trainFighter;
+}
+
+const libOpen = {};   // remembered open/closed state of section groups
 function renderLibrary() {
-  renderLibFilter();
+  renderTrainFighter();
   const lib = $("library");
-  let items = Object.values(st.combos);
-  if (!items.length) { lib.innerHTML = `<p class="muted" style="margin:0">No combos yet. Type one in the editor and save, or use Import list.</p>`; return; }
-  const fid = libFilter === "follow" ? +$("fighter").value : (libFilter === "all" ? null : +libFilter);
-  if (fid != null) items = items.filter(c => +c.fighter_id === fid);
-  if (!items.length) { lib.innerHTML = `<p class="muted" style="margin:0">No combos for ${esc(FIGHTERS[fid] || "this character")} yet. Type one in the editor or use Import list.</p>`; return; }
+  if (!Object.keys(st.combos).length) { lib.innerHTML = `<p class="muted" style="margin:0">No combos yet. Add some in <a href="#" data-go="db">Combo Database</a>.</p>`; lib.querySelector("[data-go]").onclick = e => { e.preventDefault(); showPage("db"); }; return; }
+  const items = combosFor(st.trainFighter);
   const item = c => {
-    const nm = String(c.name || c.id);
-    const short = nm.includes(": ") ? nm.slice(nm.indexOf(": ") + 2) : nm;
-    return `<button class="lib-item ${st.sel === c.id ? "sel" : ""}" data-id="${esc(c.id)}">${esc(short)}
-      ${st.status && st.status.combo_id === c.id ? ` <span class="muted" style="font-size:11px">· in game</span>` : ""}
+    const p = prof[c.id] ? prof[c.id].p : 0;
+    const ingame = st.status && st.status.combo_id === c.id;
+    return `<button class="lib-item prof ${st.sel === c.id ? "sel" : ""}" data-id="${esc(c.id)}" style="background:${profColor(p)}" title="${pctText(p)} profiled">
+      <span class="pc">${pctText(p)}</span>${esc(shortName(c))}${ingame ? ` <span class="muted" style="font-size:11px">· in game</span>` : ""}
       <small>${esc(c.notation || "")}</small></button>`;
   };
-  // group by character (when showing all), then by "Section: " name prefix
-  const byF = {};
-  for (const c of items) (byF[c.fighter || "Other"] ||= []).push(c);
-  lib.innerHTML = Object.keys(byF).sort().map(g => {
-    const secs = {}, order = [];
-    for (const c of byF[g]) {
-      const nm = String(c.name || "");
-      const sec = nm.includes(": ") ? nm.slice(0, nm.indexOf(": ")) : "";
-      if (!secs[sec]) { secs[sec] = []; order.push(sec); }
-      secs[sec].push(c);
-    }
-    order.sort((a, b) => (/^bnb/i.test(b) - /^bnb/i.test(a)) || a.localeCompare(b));
-    const body = order.map(sec => {
-      const list = secs[sec].map(item).join("");
-      if (!sec || order.length === 1) return list;
-      const key = g + "/" + sec;
-      const open = libOpen[key] ?? secs[sec].some(c => c.id === st.sel);
-      return `<details class="lib-sec" data-key="${esc(key)}" ${open ? "open" : ""}><summary>${esc(sec)} <span>${secs[sec].length}</span></summary>${list}</details>`;
-    }).join("");
-    return `<div class="lib-group">${fid == null ? `<h3>${esc(g)}</h3>` : ""}${body}</div>`;
+  const groups = groupCombos(items);
+  lib.innerHTML = groups.map(g => {
+    const list = g.list.map(item).join("");
+    if (!g.name || (groups.length === 1 && !g.exp)) return list;
+    const key = st.trainFighter + "/" + g.name;
+    const open = libOpen[key] ?? (g.exp || g.list.some(c => c.id === st.sel) || groups.length <= 3);
+    return `<details class="lib-sec" data-key="${esc(key)}" ${open ? "open" : ""}><summary${g.exp ? ` style="color:var(--warning)"` : ""}>${esc(g.name)} <span>${g.list.length}</span></summary>${list}</details>`;
   }).join("");
-  lib.querySelectorAll(".lib-item").forEach(b => b.onclick = () => selectCombo(b.dataset.id));
+  lib.querySelectorAll(".lib-item").forEach(b => b.onclick = () => selectCombo(b.dataset.id, {load: true}));
   lib.querySelectorAll("details.lib-sec").forEach(d => d.addEventListener("toggle", () => { libOpen[d.dataset.key] = d.open; }));
 }
 
@@ -770,13 +922,59 @@ function renderHeaderStatus() {
   const live = age < 12;
   pg.innerHTML = `<span class="dot ${live ? (s.in_training ? "on" : "warn") : "off"}"></span><span>${live ? (s.in_training ? "Game: in Training" : "Game: running (not in Training)") : "Game: not running"}${s.version ? " · mod v" + esc(s.version) : ""}${s.version && s.version !== PAGE_VERSION ? ` <b style="color:var(--warning)">(page is v${PAGE_VERSION}: update the mod files)</b>` : ""}</span>`;
   const c = s.combo_id && st.combos[s.combo_id];
-  pa.innerHTML = c ? `<span>${s.mode === "train" ? "TRAIN" : "DEVELOP"} · ${esc(c.name || c.id)}${s.opp_fighter_id ? ` · vs ${esc(FIGHTERS[s.opp_fighter_id] || "#" + s.opp_fighter_id)}` : ""}</span>` : `<span>Nothing loaded in game</span>`;
+  pa.innerHTML = c ? `<span>${s.mode === "train" ? "TRAINING" : "PROFILING"} · ${esc(c.name || c.id)}${s.opp_fighter_id ? ` · vs ${esc(FIGHTERS[s.opp_fighter_id] || "#" + s.opp_fighter_id)}` : ""}</span>` : `<span>Nothing loaded in game</span>`;
 }
 
-/* ===================== editor ===================== */
+/* ===================== selected combo (Combo Training) ===================== */
+function renderComboHead() {
+  const c = st.sel && st.combos[st.sel];
+  if (!c) {
+    $("ctTitle").textContent = Object.keys(st.combos).length ? "Pick a combo from the list" : "No combos yet";
+    $("ctSub").innerHTML = Object.keys(st.combos).length ? "" : `Add some in <a href="#" id="ctToDb">Combo Database</a>.`;
+    if ($("ctToDb")) $("ctToDb").onclick = e => { e.preventDefault(); showPage("db"); };
+    $("selChips").innerHTML = "";
+    return;
+  }
+  $("ctTitle").textContent = c.name || c.id;
+  const ingame = st.status && st.status.combo_id === c.id;
+  $("ctSub").innerHTML = `${esc(FIGHTERS[c.fighter_id] || c.fighter || "")} · ${c.control === "modern" ? "Modern" : "Classic"}${c.experimental ? ` · <span class="exptag">experimental</span>` : ""}${ingame ? ` · <span style="color:var(--good)">loaded in game (${st.status.mode === "train" ? "Training" : "Profiling"})</span>` : ""}`;
+  const win = st.profile && arr(st.profile.windows);
+  $("selChips").innerHTML = arr(c.steps).map((s, i) => {
+    const sep = i === 0 ? "" : `<span class="sep">${s.sep === "," ? "," : s.sep === "~" ? "~" : "&gt;"}</span>`;
+    const w = win && win[i];
+    const wtxt = w && w.n ? `${w.E}–${w.L}f` : (w && w.pred_E != null ? `~${w.pred_E}–${w.pred_L}f` : (i ? "no window yet" : "start"));
+    return `${sep}<span class="chip" style="cursor:default"><span>${labelHTML(s.label)}</span><span class="k"><span class="kind" style="background:var(--${s.kind === "move" ? "move" : "hit"})"></span>${esc(wtxt)}</span></span>`;
+  }).join("");
+}
+
+function renderProgress() {
+  const c = st.sel && st.combos[st.sel];
+  const z = c ? profilePct(st.profile, c) : null;
+  if (c && z) prof[c.id] = {...(prof[c.id] || {}), ...z, mtime: prof[c.id] ? prof[c.id].mtime : 0};
+  $("profMeter").style.width = z ? (100 * z.p).toFixed(1) + "%" : "0%";
+  $("profPct").innerHTML = !c ? "" : `<b style="color:var(--ink)">${pctText(z.p)} profiled</b> · windows ${z.wins}/${z.winOf}${z.sweetOf > 0 ? ` · sweet spots ${z.sweets}/${z.sweetOf}` : ""}${st.profile ? ` · ${st.profile.attempts || 0} attempts, ${st.profile.successes || 0} clean` : ""}`;
+}
+
+function renderToday() {
+  const s = st.status, c = st.sel && st.combos[st.sel];
+  const box = $("todayBox");
+  if (!c) { box.innerHTML = ""; return; }
+  const live = s && s.combo_id === c.id && s.mode === "train" && s.stats;
+  const x = live ? s.stats : null;
+  const P = st.profile;
+  const hasWin = P && arr(P.windows).some((w, i) => i > 0 && w && (w.n || w.pred_E != null));
+  box.innerHTML = x ? `<div class="tiles" style="margin:0">
+      <div class="tile"><div class="v">${x.n || 0}</div><div class="l">attempts today</div></div>
+      <div class="tile"><div class="v">${x.n ? Math.round(100 * (x.ok || 0) / x.n) : 0}%</div><div class="l">clean</div></div>
+      <div class="tile"><div class="v">${x.streak || 0}</div><div class="l">streak</div></div>
+      <div class="tile"><div class="v">${x.best || 0}</div><div class="l">best streak</div></div></div>`
+    : `<div class="ink2" style="font-size:13px">${hasWin ? "Training grades every press against the profiled windows. Load it in game to start; today's numbers show up here." : `<span style="color:var(--warning)">This combo has no windows yet.</span> Profile it first (Profiling tab) so Training has something to grade against.`}</div>`;
+}
+
+/* ===================== editor (Combo Database) ===================== */
 function fillFighters() {
-  const sel = $("fighter");
-  sel.innerHTML = Object.entries(FIGHTERS).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join("");
+  const html = Object.entries(FIGHTERS).sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join("");
+  $("fighter").innerHTML = html; $("impFighter").innerHTML = html;
 }
 
 function loadDraftIntoForm() {
@@ -785,6 +983,10 @@ function loadDraftIntoForm() {
   $("control").value = d.control;
   $("name").value = d.name;
   $("notation").value = d.notation;
+  $("edExperimental").checked = !!d.experimental;
+  $("edTitle").textContent = d.id ? "Edit combo" : "New combo";
+  $("btnDelete").hidden = !d.id;
+  $("saveMsg").textContent = "";
   st.overrideIdx = null;
   renderChips();
 }
@@ -795,21 +997,32 @@ function readForm() {
   d.control = $("control").value;
   d.name = $("name").value.trim();
   d.notation = $("notation").value;
+  d.experimental = $("edExperimental").checked;
 }
+
+function openEditor(id) {
+  const c = id && st.combos[id];
+  st.draft = c ? {id: c.id, name: c.name || "", fighter_id: c.fighter_id || 18, control: c.control || "classic", notation: c.notation || "", overrides: JSON.parse(JSON.stringify(c.overrides || {})), version: c.version, experimental: !!c.experimental}
+               : newDraft(st.dbFighter || st.trainFighter);
+  $("importCard").classList.add("hidden");
+  $("editor").classList.remove("hidden");
+  loadDraftIntoForm();
+  $("editor").scrollIntoView({behavior: "smooth", block: "nearest"});
+  $(c ? "name" : "notation").focus();
+}
+function closeEditor() { $("editor").classList.add("hidden"); st.draft = null; }
 
 function renderChips() {
   const d = st.draft;
+  if (!d) return;
   const steps = parseCombo(d.notation, d.control, d.overrides);
   const box = $("chips");
   if (!steps.length) { box.innerHTML = `<span class="muted" style="font-size:13px">Steps appear here as you type.</span>`; $("override").innerHTML = ""; return; }
-  const win = st.profile && arr(st.profile.windows);
   box.innerHTML = steps.map((s, i) => {
     const sep = i === 0 ? "" : `<span class="sep">${s.sep === "," ? "," : s.sep === "~" ? "~" : "&gt;"}</span>`;
-    const w = win && win[i];
-    const wtxt = w && w.n ? ` · ${w.E}–${w.L}f` : "";
     return `${sep}<button class="chip ${s.error ? "err" : ""} ${st.overrideIdx === i ? "sel" : ""}" data-i="${i}" title="${esc(s.error || "click to adjust")}">
       <span>${labelHTML(s.label)}</span>
-      <span class="k"><span class="kind" style="background:var(--${s.kind === "move" ? "move" : "hit"})"></span>${s.kind === "move" ? "move" : "hit"} · ${esc(triggerText(s.trigger, d.control))}${wtxt}${s.overridden ? " ·" + " edited" : ""}</span>
+      <span class="k"><span class="kind" style="background:var(--${s.kind === "move" ? "move" : "hit"})"></span>${s.kind === "move" ? "move" : "hit"} · ${esc(triggerText(s.trigger, d.control))}${s.overridden ? " · edited" : ""}</span>
     </button>`;
   }).join("");
   box.querySelectorAll(".chip").forEach(c => c.onclick = () => { st.overrideIdx = st.overrideIdx === +c.dataset.i ? null : +c.dataset.i; renderChips(); });
@@ -846,6 +1059,11 @@ function renderOverride(steps) {
   $("ovReset").onclick = () => { delete d.overrides[i]; renderChips(); };
 }
 
+async function writeCombo(combo) {
+  if (FS.ok) await FS.write(`combos/${combo.id}.json`, combo);
+  st.combos[combo.id] = combo;
+}
+
 async function saveDraft() {
   readForm();
   const d = st.draft;
@@ -860,28 +1078,37 @@ async function saveDraft() {
     format: "combolab.combo/1", id: d.id, name: d.name, fighter_id: d.fighter_id, fighter: FIGHTERS[d.fighter_id] || "",
     control: d.control, notation: d.notation.trim(), version, hash,
     steps: steps.map(s => ({label: s.label, sep: s.sep, kind: s.kind, trigger: s.trigger})),
-    overrides: d.overrides, updated: new Date().toISOString(),
+    overrides: d.overrides, experimental: !!d.experimental, updated: new Date().toISOString(),
   };
-  if (FS.ok) {
-    await FS.write(`combos/${combo.id}.json`, combo);
-    $("saveMsg").textContent = prev && prev.hash !== hash ? "Saved. Steps changed, so the old timing profile will reset in game." : "Saved.";
-  } else {
-    $("saveMsg").textContent = "Not linked to a folder: use Export JSON.";
-  }
-  st.combos[combo.id] = combo;
-  const switched = st.sel !== combo.id;
-  st.sel = combo.id;
-  if (switched) { st.profile = null; st.session = null; st.profileMtime = 0; st.sessionMtime = 0; }
-  renderLibrary();
-  renderTabs();
-  pollData(true);
+  if (prev && prev.verified && !combo.experimental) combo.verified = prev.verified;
+  if (prev && prev.bot) combo.bot = prev.bot;
+  if (!FS.ok) { $("saveMsg").textContent = "Not linked to a folder: use Export JSON."; return null; }
+  await writeCombo(combo);
+  if (prev && prev.hash !== hash) { delete prof[combo.id]; if (st.sel === combo.id) { st.profile = null; st.profileMtime = 0; } }
+  sendCommand({cmd: "rescan"});
+  st.dbFighter = combo.fighter_id;
   return combo;
 }
 
+/* ===================== commands to the game =====================
+   One command file: write one, give the mod time to pick it up (it polls
+   twice a second), then the next. Option changes queued behind each other
+   collapse into the newest. */
+const cmdQ = []; let cmdBusy = false;
+function note(msg) { $("loadMsg").textContent = msg || ""; }
 async function sendCommand(cmd) {
-  if (!FS.ok) { $("saveMsg").textContent = "Link the game folder first."; return; }
-  cmd.seq = Date.now();
-  await FS.write("command.json", cmd);
+  if (!FS.ok) { note("Link the game folder first (Hub Sync tab)."); return; }
+  if (cmd.cmd === "options") { const i = cmdQ.findIndex(c => c.cmd === "options"); if (i >= 0) cmdQ.splice(i, 1); }
+  cmdQ.push(cmd);
+  if (cmdBusy) return;
+  cmdBusy = true;
+  while (cmdQ.length) {
+    const c = cmdQ.shift();
+    c.seq = Date.now();
+    try { await FS.write("command.json", c); } catch (e) {}
+    await new Promise(r => setTimeout(r, 1100));
+  }
+  cmdBusy = false;
 }
 
 function optionsFromForm() {
@@ -905,25 +1132,139 @@ function optionsToForm(o) {
   if (o.train_view) $("optView").value = o.train_view;
   if (o.note_approach) $("optApproach").value = o.note_approach;
   $("optFlip").checked = !!o.note_flip;
-  if (o.motion_arrows != null && $("optArrows").checked !== !!o.motion_arrows) { $("optArrows").checked = !!o.motion_arrows; try { renderChips(); renderTabs(); } catch (e) {} }
+  if (o.motion_arrows != null && $("optArrows").checked !== !!o.motion_arrows) { $("optArrows").checked = !!o.motion_arrows; LS.set("arrows", o.motion_arrows ? "1" : "0"); rerenderLabels(); }
   if (o.note_palette) $("optPalette").value = o.note_palette;
   if (o.fix_pos) $("optFixPos").value = o.fix_pos;
-  $("optSong").checked = !!o.song_mode; $("optFollow").checked = !!o.song_follow;
+  if (o.song_mode != null) $("optSong").checked = !!o.song_mode;
+  $("optFollow").checked = !!o.song_follow;
   if (o.song_approach) $("optSongApproach").value = o.song_approach;
   if (o.song_beat) $("optSongBeat").value = o.song_beat;
   if (o.scale) $("optScale").value = o.scale;
   if (o.y) $("optY").value = o.y;
 }
 
-async function selectCombo(id) {
+function botBusy() { const b = st.status && st.status.bot; return !!(b && b.running); }
+
+// Loads the selected combo in game, in the mode of the open sub-tab.
+async function loadInGame(why) {
+  const c = st.sel && st.combos[st.sel];
+  if (!c || !FS.ok) return;
+  if (botBusy()) { note("The research bot is running; stop it to switch what's loaded in game."); return; }
+  const mode = modeOf(st.sub);
+  st.modeSentAt = Date.now();
+  if (st.status && st.status.combo_id === c.id) {
+    if (st.status.mode !== mode) await sendCommand({cmd: "mode", mode});
+  } else {
+    const cmd = {cmd: "load", combo_id: c.id, mode};
+    if (st.optsSynced) cmd.options = optionsFromForm();
+    await sendCommand(cmd);
+  }
+  note(why || `Sent to game: ${st.sub === "training" ? "Training" : "Profiling"}. Jump into Training mode.`);
+}
+
+async function selectCombo(id, {load = false} = {}) {
   const c = st.combos[id];
   if (!c) return;
+  const changed = st.sel !== id;
   st.sel = id;
-  st.draft = {id: c.id, name: c.name || "", fighter_id: c.fighter_id || 18, control: c.control || "classic", notation: c.notation || "", overrides: c.overrides || {}, version: c.version};
-  st.profile = null; st.session = null; st.profileMtime = 0; st.sessionMtime = 0;
-  loadDraftIntoForm();
-  renderLibrary();
+  LS.set("sel", id);
+  if (+c.fighter_id !== +st.trainFighter) { st.trainFighter = +c.fighter_id; LS.set("train_fighter", st.trainFighter); }
+  if (changed) { st.profile = null; st.session = null; st.profileMtime = 0; st.sessionMtime = 0; }
+  renderLibrary(); renderComboHead(); renderPanes();
+  if (load) loadInGame();
+  if (load && innerWidth <= 900) $("comboHead").scrollIntoView({behavior: "smooth", block: "start"});
   await pollData(true);
+}
+
+function setSub(sub, send) {
+  st.sub = sub === "training" ? "training" : "profiling";
+  LS.set("sub", st.sub);
+  document.querySelectorAll(".subtabs button").forEach(b => b.classList.toggle("on", b.dataset.sub === st.sub));
+  $("paneProfiling").hidden = st.sub !== "profiling";
+  $("paneTraining").hidden = st.sub !== "training";
+  renderPanes();
+  if (send) loadInGame();
+}
+
+function showPage(page) {
+  st.page = page;
+  document.querySelectorAll(".pagenav button").forEach(x => x.classList.toggle("on", x.dataset.page === page));
+  $("mainTraining").hidden = page !== "training"; $("mainDb").hidden = page !== "db"; $("mainHub").hidden = page !== "hub";
+  clearInterval(hubTimer);
+  if (page === "hub") { renderFolder(); renderHubPage(); hubTimer = setInterval(() => { if (!document.hidden) renderHubPage(true); }, 5000); }
+  if (page === "db") { if (!st.dbFighter) st.dbFighter = st.trainFighter; renderDb(); refreshProfiles(); }
+  if (page === "training") { renderLibrary(); renderComboHead(); renderPanes(); }
+}
+
+function rerenderLabels() { try { renderComboHead(); renderChips(); renderPanes(); if (st.page === "db") renderDb(); } catch (e) {} }
+
+/* ===================== Combo Database ===================== */
+function renderDb() {
+  const counts = fighterCounts();
+  const ids = Object.keys(FIGHTERS).map(Number).sort(byFighterName);
+  $("charGrid").innerHTML = ids.map(id => `<button data-f="${id}" class="${counts[id] ? "" : "none"} ${+st.dbFighter === id ? "on" : ""}"><span>${esc(FIGHTERS[id])}</span><small>${counts[id] || ""}</small></button>`).join("")
+    + (counts["0"] ? `<button data-f="0" class="${+st.dbFighter === 0 ? "on" : ""}"><span>Other</span><small>${counts["0"]}</small></button>` : "");
+  $("charGrid").querySelectorAll("button").forEach(b => b.onclick = () => { st.dbFighter = +b.dataset.f === +st.dbFighter ? null : +b.dataset.f; renderDb(); refreshProfiles(); });
+  const box = $("dbList");
+  const fid = st.dbFighter;
+  if (fid == null || !(fid in FIGHTERS || fid === 0)) { box.innerHTML = `<p class="muted" style="margin:0">Pick a character to see, add, edit or remove their combos.</p>`; return; }
+  const list = combosFor(fid);
+  let html = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(FIGHTERS[fid] || "Other")} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">${list.length} combo${list.length === 1 ? "" : "s"}</span></h2>
+    <span class="row" style="gap:6px"><button class="btn small" data-act="import">Import list</button><button class="btn small primary" data-act="new">+ New combo</button></span></div>`;
+  if (!list.length) html += `<p class="muted">No combos for ${esc(FIGHTERS[fid] || "this character")} yet.</p>`;
+  for (const g of groupCombos(list)) {
+    html += `<div class="dbsec ${g.exp ? "exp" : ""}">${esc(g.name || "Combos")} <span class="muted" style="font-weight:400">${g.list.length}</span></div>`;
+    if (g.exp) html += `<div class="muted" style="font-size:12px;margin-bottom:4px">Not confirmed to work yet. Each one is verified automatically on its first clean run (yours or the research bot's); the bot's “all combos” run gives up on one after 30 attempts in a row without a success.</div>`;
+    html += g.list.map(c => {
+      const p = prof[c.id] ? prof[c.id].p : 0;
+      return `<div class="dbrow" data-id="${esc(c.id)}">
+        <span class="pcb" style="background:${profColor(p)}" title="profiled">${pctText(p)}</span>
+        <div style="min-width:0"><div class="nm">${esc(shortName(c))} ${c.control === "modern" ? `<span class="muted" style="font-size:11.5px">modern</span>` : ""}</div><small>${esc(c.notation || "")}</small></div>
+        <span class="row" style="gap:6px;flex-wrap:nowrap">
+          <button class="btn small" data-act="train" title="Open in Combo Training">Open</button>
+          <button class="btn small" data-act="exp">${c.experimental ? "Mark verified" : "Mark experimental"}</button>
+          <button class="btn small" data-act="edit">Edit</button>
+          <button class="btn small danger" data-act="del" title="Delete">✕</button>
+        </span></div>`;
+    }).join("");
+  }
+  box.innerHTML = html;
+  box.querySelectorAll("[data-act]").forEach(b => b.onclick = async () => {
+    const row = b.closest(".dbrow"), id = row && row.dataset.id, c = id && st.combos[id];
+    const act = b.dataset.act;
+    if (act === "new") return openEditor(null);
+    if (act === "import") return openImport();
+    if (!c) return;
+    if (act === "edit") return openEditor(id);
+    if (act === "train") { showPage("training"); return selectCombo(id); }
+    if (act === "exp") {
+      const nc = {...c, experimental: !c.experimental};
+      if (nc.experimental) delete nc.verified; else nc.verified = "manual " + new Date().toISOString();
+      await writeCombo(nc); sendCommand({cmd: "rescan"}); renderDb(); renderLibrary(); renderComboHead(); return;
+    }
+    if (act === "del") return deleteCombo(id);
+  });
+}
+
+async function deleteCombo(id) {
+  const c = st.combos[id];
+  if (!c || !FS.ok) return;
+  if (!confirm(`Delete “${c.name || id}”? Its profile and history stay in the folder.`)) return;
+  try { await FS.remove(`combos/${id}.json`); } catch (e) {}
+  delete st.combos[id]; delete prof[id];
+  if (st.sel === id) { st.sel = null; st.profile = null; st.session = null; }
+  if (st.draft && st.draft.id === id) closeEditor();
+  sendCommand({cmd: "rescan"});
+  renderDb(); renderLibrary(); renderComboHead(); renderPanes();
+}
+
+function openImport() {
+  closeEditor();
+  $("importCard").classList.remove("hidden");
+  $("impFighter").value = st.dbFighter || st.trainFighter || 18;
+  $("impMsg").textContent = "";
+  $("importCard").scrollIntoView({behavior: "smooth", block: "nearest"});
+  $("impText").focus();
 }
 
 /* ===================== charts ===================== */
@@ -937,7 +1278,7 @@ function renderProfile() {
   if (!c) { box.innerHTML = `<p class="muted">Select or save a combo.</p>`; return; }
   const P = st.profile;
   if (!P || !P.steps) {
-    box.innerHTML = `<div class="notice"><b>No timing data yet.</b> Click <b>Develop in game</b>, go into Training mode and do the combo a bunch of times: clean runs, drops, early and late on purpose. Each attempt adds samples; the windows below fill in as you go.</div>`;
+    box.innerHTML = `<div class="notice"><b>No timing data yet.</b> Click <b>Profile in game</b>, go into Training mode and do the combo a bunch of times: clean runs, drops, early and late on purpose, or let the <b>research bot</b> do it. Each attempt adds samples; the windows below fill in as you go.</div>`;
     return;
   }
   const steps = c.steps;
@@ -1101,11 +1442,9 @@ function renderTrain() {
   box.querySelectorAll(".hov2").forEach(el => { el.addEventListener("mousemove", e => showTip(e, esc(el.dataset.t))); el.addEventListener("mouseleave", hideTip); });
 }
 
-function renderTabs() {
-  $("tabProfile").classList.toggle("hidden", st.tab !== "profile");
-  $("tabTrain").classList.toggle("hidden", st.tab !== "train");
-  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.tab === st.tab));
-  if (st.tab === "profile") renderProfile(); else renderTrain();
+function renderPanes() {
+  renderProgress();
+  if (st.sub === "profiling") renderProfile(); else { renderToday(); renderTrain(); }
 }
 
 /* ===================== polling ===================== */
@@ -1116,6 +1455,45 @@ async function loadLibrary() {
   for (const n of names) { const r = await FS.read("combos/" + n); if (r && r.data && r.data.id) out[r.data.id] = r.data; }
   st.combos = out;
   renderLibrary();
+  if (st.page === "db") renderDb();
+}
+
+// Marks an experimental combo verified (first clean run by the player or the bot).
+async function verifyCombo(id, how) {
+  const c = st.combos[id];
+  if (!c || !c.experimental || !FS.ok) return;
+  const nc = {...c, experimental: false, verified: how + " " + new Date().toISOString()};
+  await writeCombo(nc);
+  sendCommand({cmd: "rescan"});
+  return true;
+}
+
+// Profiling % for the combos on screen (sidebar character + database
+// character). Only re-reads profile files whose mtime changed.
+let profBusy = false;
+async function refreshProfiles() {
+  if (!FS.ok || profBusy) return;
+  profBusy = true;
+  try {
+    const want = new Set();
+    for (const c of combosFor(st.trainFighter)) want.add(c.id);
+    if (st.page === "db" && st.dbFighter != null) for (const c of combosFor(st.dbFighter)) want.add(c.id);
+    const mt = await FS.stat("profiles");
+    let changed = false;
+    for (const id of want) {
+      const c = st.combos[id]; if (!c) continue;
+      const m = mt ? mt[id + ".json"] : undefined;
+      const cur = prof[id];
+      if (mt && m === undefined) { if (!cur || cur.p) { prof[id] = {...profilePct(null, c), mtime: 0, hash: c.hash}; changed = true; } continue; }
+      if (cur && cur.hash === c.hash && (mt ? cur.mtime === m : Date.now() - (cur.read || 0) < 20000)) continue;
+      const r = await FS.read(`profiles/${id}.json`);
+      const z = profilePct(r && r.data, c);
+      prof[id] = {...z, mtime: mt ? m : (r && r.mtime), read: Date.now(), hash: c.hash};
+      changed = true;
+      if (c.experimental && z.ok > 0 && await verifyCombo(id, "clean run")) changed = true;
+    }
+    if (changed) { renderLibrary(); if (st.page === "db") renderDb(); }
+  } finally { profBusy = false; }
 }
 
 async function pollData(force) {
@@ -1124,8 +1502,12 @@ async function pollData(force) {
   if (s && (force || s.mtime !== st.statusMtime)) {
     const first = !st.status;
     st.statusMtime = s.mtime; st.status = s.data;
-    if (first) optionsToForm(s.data.options);
-    renderHeaderStatus(); renderLibrary(); renderBot();
+    if (first) { optionsToForm(s.data.options); st.optsSynced = true; }
+    // the game switched mode by itself (F5): follow it, unless we just asked for one
+    if (st.sel && s.data.combo_id === st.sel && s.data.mode && subOf(s.data.mode) !== st.sub && Date.now() - st.modeSentAt > 4000) setSub(subOf(s.data.mode), false);
+    for (const r of arr(s.data.bot && s.data.bot.results)) if (r.ok && st.combos[r.id] && st.combos[r.id].experimental) verifyCombo(r.id, "research bot");
+    renderHeaderStatus(); renderLibrary(); renderComboHead(); renderBot();
+    if (st.sub === "training") renderToday();
   } else if (st.status) renderHeaderStatus();
   const hub = await FS.read("shared/_status.json");
   renderHubStatus(hub && hub.data);
@@ -1141,40 +1523,51 @@ async function pollData(force) {
   const se = await FS.read(`sessions/${st.sel}.json`);
   if (se && (force || se.mtime !== st.sessionMtime)) { st.sessionMtime = se.mtime; st.session = se.data; changed = true; }
   else if (!se && force) { st.session = null; changed = true; }
-  if (changed) { renderTabs(); renderChips(); }
+  if (changed) {
+    renderPanes(); renderComboHead();
+    const c = st.combos[st.sel];
+    if (c) { const z = prof[c.id]; renderLibrary(); if (c.experimental && z && z.ok > 0) verifyCombo(c.id, "clean run"); }
+  }
 }
 
 async function afterConnect() {
   await loadLibrary();
-  const ids = Object.keys(st.combos);
   await pollData(true);
   if (!st.sel) {
-    const pick = (st.status && st.status.combo_id && st.combos[st.status.combo_id]) ? st.status.combo_id : ids[0];
+    const remembered = LS.get("sel", "");
+    const pick = (st.status && st.status.combo_id && st.combos[st.status.combo_id]) ? st.status.combo_id
+      : st.combos[remembered] ? remembered : null;
     if (pick) await selectCombo(pick);
   }
+  if (st.status && st.status.combo_id === st.sel && st.status.mode) setSub(subOf(st.status.mode), false);
+  renderComboHead();
+  refreshProfiles();
 }
 
 
-/* ===================== training bot ===================== */
+/* ===================== research bot ===================== */
 function botOptions() {
   return {reps: +$("botReps").value, position_override: $("botPos").value || undefined, spacing: +$("botSpacing").value,
           sweet: $("botSweet").checked, reset: $("botReset").checked};
 }
+// every classic combo of the sidebar's character that still has something to find
 function botFighterIds() {
-  const fid = libFilter === "follow" || libFilter === "all" ? +$("fighter").value : +libFilter;
-  return Object.values(st.combos).filter(c => +c.fighter_id === fid && (c.control || "classic") === "classic")
-    .sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => c.id);
+  return combosFor(st.trainFighter).filter(c => (c.control || "classic") === "classic" && ($("botReset").checked || !(prof[c.id] && prof[c.id].p > 0.999)))
+    .sort((a, b) => (!!a.experimental - !!b.experimental) || String(a.name).localeCompare(String(b.name))).map(c => c.id);
 }
 $("btnBotOne").onclick = async () => {
-  const c = await saveDraft(); if (!c) return;
+  const c = st.sel && st.combos[st.sel]; if (!c) return;
   await sendCommand({cmd: "bot_start", ids: [c.id], options: botOptions()});
   $("botStatus").innerHTML = `<span class="muted">Sent. The bot starts as soon as the game is in Training mode.</span>`;
 };
 $("btnBotAll").onclick = async () => {
+  await refreshProfiles();
   const ids = botFighterIds();
-  if (!ids.length) { $("botStatus").innerHTML = `<span class="error">No combos for this character yet.</span>`; return; }
-  if (!confirm(`Profile ${ids.length} combos for ${FIGHTERS[+$("fighter").value] || "this character"}? This can take a while; leave the game in Training mode.`)) return;
-  await sendCommand({cmd: "bot_start", ids, options: botOptions()});
+  const nm = FIGHTERS[st.trainFighter] || "this character";
+  if (!ids.length) { $("botStatus").innerHTML = `<span class="muted">Every classic combo for ${esc(nm)} is already fully profiled.</span>`; return; }
+  const nexp = ids.filter(id => st.combos[id].experimental).length;
+  if (!confirm(`Profile ${ids.length} combo${ids.length === 1 ? "" : "s"} for ${nm}${nexp ? ` (${nexp} experimental)` : ""}? This can take a while; leave the game in Training mode.`)) return;
+  await sendCommand({cmd: "bot_start", ids, options: {...botOptions(), experimental_limit: 30}});
   $("botStatus").innerHTML = `<span class="muted">Sent ${ids.length} combos to the bot.</span>`;
 };
 $("btnBotStop").onclick = () => sendCommand({cmd: "bot_stop"});
@@ -1210,26 +1603,47 @@ function renderBot() {
 }
 
 /* ===================== wire up ===================== */
+let hubTimer = null, hubShowConnect = false;
 fillFighters();
-st.draft = newDraft();
-st.draft.notation = "";
-loadDraftIntoForm();
+try { $("optArrows").checked = LS.get("arrows", "1") !== "0"; } catch (e) {}
 renderFolder();
-renderTabs();
+setSub(st.sub, false);
+renderComboHead();
 
+document.querySelectorAll(".pagenav button").forEach(b => b.onclick = () => showPage(b.dataset.page));
+document.querySelectorAll(".subtabs button").forEach(b => b.onclick = () => { if (b.dataset.sub !== st.sub) setSub(b.dataset.sub, true); });
+$("trainFighter").onchange = e => { st.trainFighter = +e.target.value; LS.set("train_fighter", st.trainFighter); renderLibrary(); refreshProfiles(); };
+$("btnToDb").onclick = () => { st.dbFighter = st.trainFighter; showPage("db"); };
+
+// editor
 ["fighter", "control", "name", "notation"].forEach(id => $(id).addEventListener("input", () => { readForm(); renderChips(); }));
-$("fighter").addEventListener("change", () => { if (libFilter === "follow") renderLibrary(); });
-$("optArrows").onchange = () => { try { localStorage.setItem("combolab_arrows", $("optArrows").checked ? "1" : "0"); } catch (e) {} renderChips(); renderTabs(); };
-try { $("optArrows").checked = localStorage.getItem("combolab_arrows") === "1"; } catch (e) {}
-$("libFilter").onchange = e => { libFilter = e.target.value; try { localStorage.setItem("combolab_libfilter", libFilter); } catch (er) {} renderLibrary(); };
-$("btnNew").onclick = () => { st.sel = null; st.draft = newDraft(); st.profile = null; st.session = null; loadDraftIntoForm(); renderLibrary(); renderTabs(); $("notation").focus(); };
-$("btnSave").onclick = saveDraft;
-$("impFighter").innerHTML = $("fighter").innerHTML;
-$("btnImport").onclick = () => { $("importCard").classList.remove("hidden"); $("impFighter").value = $("fighter").value; $("impText").focus(); };
+$("btnNew").onclick = () => openEditor(null);
+$("btnSave").onclick = async () => {
+  const c = await saveDraft();
+  if (!c) return;
+  closeEditor();
+  renderDb(); renderLibrary(); refreshProfiles();
+  if (st.sel === c.id) { renderComboHead(); pollData(true); }
+};
+$("btnCancelEdit").onclick = closeEditor;
+$("btnDelete").onclick = () => st.draft && st.draft.id && deleteCombo(st.draft.id);
+$("btnExport").onclick = () => {
+  readForm();
+  const d = st.draft; const {steps, hash} = buildCombo(d);
+  if (steps.some(s => s.error) || !steps.length) { renderChips(); return; }
+  const id = d.id || slug((FIGHTERS[d.fighter_id] || "x") + "-" + (d.name || "combo"));
+  const combo = {format: "combolab.combo/1", id, name: d.name || d.notation.slice(0, 40), fighter_id: d.fighter_id, fighter: FIGHTERS[d.fighter_id], control: d.control, notation: d.notation.trim(), version: d.version || 1, hash, steps: steps.map(s => ({label: s.label, sep: s.sep, kind: s.kind, trigger: s.trigger})), overrides: d.overrides, experimental: !!d.experimental};
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(combo, null, 1)], {type: "application/json"}));
+  a.download = id + ".json"; a.click();
+};
+
+// import
+$("btnImport").onclick = openImport;
 $("btnCancelImport").onclick = () => $("importCard").classList.add("hidden");
 $("btnDoImport").onclick = async () => {
   if (!FS.ok) { $("impMsg").textContent = "Link the game folder (or open the page from the server) first."; return; }
-  const fid = +$("impFighter").value, control = $("impControl").value, fname = FIGHTERS[fid] || "";
+  const fid = +$("impFighter").value, control = $("impControl").value, fname = FIGHTERS[fid] || "", experimental = $("impExperimental").checked;
   let section = "", ok = 0; const bad = [];
   const lines = $("impText").value.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
@@ -1244,47 +1658,32 @@ $("btnDoImport").onclick = async () => {
     const clean = steps.map(({error, ...r}) => r);
     const full = [section, name || notation].filter(Boolean).join(": ");
     const id = slug(fname + "-" + full).slice(0, 60) + "-" + Math.random().toString(36).slice(2, 6);
-    const combo = {format: "combolab.combo/1", id, name: full, fighter_id: fid, fighter: fname, control, notation, version: 1, hash: hashSteps(clean), steps: clean, overrides: {}, updated: new Date().toISOString()};
-    await FS.write(`combos/${id}.json`, combo);
-    st.combos[id] = combo; ok++;
+    const combo = {format: "combolab.combo/1", id, name: full, fighter_id: fid, fighter: fname, control, notation, version: 1, hash: hashSteps(clean), steps: clean, overrides: {}, experimental, updated: new Date().toISOString()};
+    await writeCombo(combo); ok++;
   }
-  renderLibrary();
+  st.dbFighter = fid;
+  renderDb(); renderLibrary(); refreshProfiles();
   $("impMsg").innerHTML = `Imported ${ok} combo${ok === 1 ? "" : "s"}.` + (bad.length ? ` <span class="error">Skipped ${bad.length}: ${esc(bad.slice(0, 3).join("; "))}${bad.length > 3 ? "…" : ""}</span>` : "");
   if (ok) sendCommand({cmd: "rescan"});
 };
-$("btnDevelop").onclick = async () => { const c = await saveDraft(); if (c) { await sendCommand({cmd: "load", combo_id: c.id, mode: "develop", options: optionsFromForm()}); $("saveMsg").textContent = "Sent to game: Develop. Jump into Training mode."; } };
-$("btnTrain").onclick = async () => { const c = await saveDraft(); if (c) { await sendCommand({cmd: "load", combo_id: c.id, mode: "train", options: optionsFromForm()}); $("saveMsg").textContent = "Sent to game: Train."; } };
-$("btnOptions").onclick = async () => { await sendCommand({cmd: "options", options: optionsFromForm()}); $("saveMsg").textContent = "Options sent to game."; };
-$("btnResetProfile").onclick = async () => { if (!st.sel) return; if (!confirm("Clear all timing samples for this combo?")) return; await sendCommand({cmd: "reset_profile", combo_id: st.sel}); setTimeout(() => pollData(true), 1200); };
-$("btnExport").onclick = () => {
-  readForm();
-  const d = st.draft; const {steps, hash} = buildCombo(d);
-  if (steps.some(s => s.error) || !steps.length) { renderChips(); return; }
-  const id = d.id || slug((FIGHTERS[d.fighter_id] || "x") + "-" + (d.name || "combo"));
-  const combo = {format: "combolab.combo/1", id, name: d.name || d.notation.slice(0, 40), fighter_id: d.fighter_id, fighter: FIGHTERS[d.fighter_id], control: d.control, notation: d.notation.trim(), version: d.version || 1, hash, steps: steps.map(s => ({label: s.label, sep: s.sep, kind: s.kind, trigger: s.trigger})), overrides: d.overrides};
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(combo, null, 1)], {type: "application/json"}));
-  a.download = id + ".json"; a.click();
-};
-$("btnDelete").onclick = async () => {
-  if (!st.sel || !FS.ok) return;
-  if (!confirm("Delete this combo file? Its profile and history stay in the folder.")) return;
-  try { await FS.remove(`combos/${st.sel}.json`); } catch (e) {}
-  delete st.combos[st.sel]; st.sel = null; st.draft = newDraft(); loadDraftIntoForm(); renderLibrary(); renderTabs();
-};
-document.querySelectorAll(".tab").forEach(t => t.onclick = () => { st.tab = t.dataset.tab; renderTabs(); });
 
-// ---------------------------------------------------------------- Hub page (sync this PC with a ComboLab hub)
-let hubPage = false, hubTimer = null, hubShowConnect = false;
-document.querySelectorAll(".pagenav button").forEach(b => b.onclick = () => {
-  hubPage = b.dataset.page === "hub";
-  document.querySelectorAll(".pagenav button").forEach(x => x.classList.toggle("on", x === b));
-  $("mainHub").hidden = !hubPage; $("mainTrainer").hidden = hubPage;
-  clearInterval(hubTimer);
-  if (hubPage) { renderHubPage(); hubTimer = setInterval(() => { if (!document.hidden) renderHubPage(true); }, 5000); }
-});
+// training / profiling actions
+$("btnDevelop").onclick = () => { if (st.sub !== "profiling") setSub("profiling", false); st.status && st.sel === st.status.combo_id && st.status.mode === "develop" ? note("Already loaded in game for profiling.") : loadInGame(); };
+$("btnTrain").onclick = () => { if (st.sub !== "training") setSub("training", false); st.status && st.sel === st.status.combo_id && st.status.mode === "train" ? note("Already loaded in game for training.") : loadInGame(); };
+$("btnResetStats").onclick = () => sendCommand({cmd: "reset_stats", keep_history: true});
+$("btnResetProfile").onclick = async () => { if (!st.sel) return; if (!confirm("Clear all timing samples for this combo?")) return; await sendCommand({cmd: "reset_profile", combo_id: st.sel}); setTimeout(() => pollData(true), 1500); };
+
+// options go to the game as they change
+let optTimer = null;
+document.querySelectorAll('[id^="opt"]').forEach(el => el.addEventListener(el.type === "range" ? "change" : "input", () => {
+  if (el.id === "optArrows") { LS.set("arrows", el.checked ? "1" : "0"); rerenderLabels(); }
+  clearTimeout(optTimer);
+  optTimer = setTimeout(() => { if (FS.ok) { sendCommand({cmd: "options", options: optionsFromForm()}); $("optMsg").textContent = "Sent to the game."; setTimeout(() => $("optMsg").textContent = "Changes go to the game as you make them.", 2500); } }, 350);
+}));
+
+// ---------------------------------------------------------------- Hub Sync page
 $("pillHub").style.cursor = "pointer";
-$("pillHub").onclick = () => document.querySelector('.pagenav button[data-page="hub"]').click();
+$("pillHub").onclick = () => showPage("hub");
 const cleanName = s => String(s || "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 const agoS = t => { if (!t) return "never"; const s = Math.max(0, Date.now() / 1000 - t); return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago" : Math.round(s / 3600) + " h ago"; };
 async function renderHubPage(quiet) {
@@ -1359,6 +1758,7 @@ function renderHubConnect(h) {
     if (r === "ok") await afterConnect();
   }
   setInterval(() => pollData(false), 1000);
+  setInterval(() => { if (!document.hidden) refreshProfiles(); }, 4000);
 })();
 </script>
 </body>

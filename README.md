@@ -78,12 +78,12 @@ docker compose -f hub/docker-compose.yml run --rm hub set-admin-password      # 
 
 Server-side backups: `combolab_hub.py export <folder>` writes everything out as plain JSON files. `allow-key`, `list-keys` and `remove-key` manage keys from the shell.
 
-**On each gaming PC**, start **run_server.bat**, open the page from it (`http://localhost:8765`) and go to the **Hub** tab:
+**On each gaming PC**, start **run_server.bat**, open the page from it (`http://localhost:8765`) and go to the **Hub Sync** tab:
 1. Enter the hub's address and a name for this PC. It suggests the PC's hostname; letters, digits, `-`, `_` and `.` only.
 2. Click **Ask to join**. The PC makes its own sync token and sends the hub only a hash of it.
 3. Approve the request on the hub's `/admin` page under **Sync machines → Asking to join**. Syncing starts by itself, every 20 seconds while the server runs.
 
-The Hub tab also has:
+The Hub Sync tab also has:
 - **Sync now**;
 - **Rename:** each PC has a permanent hidden ID on the hub, and the name is only a label, so renaming changes nothing else;
 - **Change hub** and **Disconnect**;
@@ -101,7 +101,7 @@ The page's header shows the sync state ("Hub: synced just now" or "Hub: waiting 
 
 The game stays the only thing that writes `profiles/`. The agent drops the hub's merged copy in `shared/`, and the mod merges it in within a few seconds: straight away for combos that aren't loaded, and between attempts for the one that is (never while the bot is running). Resetting a profile on any machine resets it everywhere, and older samples from other machines don't come back. Profiles recorded before 1.7 merge fine too.
 
-## Training bot (automatic profiles)
+## Research bot (automatic profiles)
 
 The bot plays combos for you in Training mode and sweeps each step's press timing frame by frame, so profiles come out exact without practice runs. It presses buttons through the same input hook the mod already reads from (the technique Wael3rd's SF6_Tools uses for playback), and it moves both fighters back into position between attempts.
 
@@ -112,12 +112,14 @@ The bot plays combos for you in Training mode and sweeps each step's press timin
 - Keep your hands off the controller: any real input stops the bot.
 - Playing offline is safest, and remove `dinput8.dll` before going online.
 
-**Start it** from the web page's **Training bot** card (this combo, or every combo for the character), from the REFramework menu (ComboLab > Training bot), or with **F10** for the current combo. F10 again stops it.
+**Start it** from the **Research bot** card on the Profiling tab (this combo, or every combo for the character), from the REFramework menu (ComboLab > Research bot), or with **F10** for the current combo. F10 again stops it.
 
 **What it does for each combo:**
 1. Finds each step's window: with earlier steps at their middle timing, it tries the step on every frame until it has seen it work and then fail 4 frames in a row, then re-tests the edges.
 2. Sweet-spot pass: plays the full combo varying one step across its window, so the profile learns which part keeps the next step alive.
 3. Checks the full combo at the final target timings and reports how many were clean.
+
+**Profile all combos for this character** skips combos that are already at 100% (unless **Replace existing profile** is ticked) and runs experimental combos last. It gives up on an experimental combo after 30 attempts in a row with nothing working, so a combo that doesn't actually work can't eat the whole run.
 
 **Re-running a combo** keeps its profile and starts from what's already there: for each step with a measured window, the bot first checks that window's edges (about four attempts), and only searches if they no longer hold. Tick **Replace existing profile** to start from scratch instead. Steps with no measured window start from the frame-data prediction.
 
@@ -129,41 +131,57 @@ Position comes from the combo name ("corner" in the name means corner) unless yo
 
 ## Fighter placement for your own practice
 
-Corner combos (any with "corner" in the name) put both fighters in the corner you're facing when the combo loads, and again between attempts once you've been idle for about a second. Turn it off with **Corner combos: place fighters in the corner** in the session options. The REFramework menu has **Place fighters in the corner now** / **Midscreen now** buttons and a spacing slider. SF6's own option works too: hold left or right while pressing the reset-position button in Training.
+Corner combos (any with "corner" in the name) put both fighters in the corner you're facing when the combo loads, and again between attempts once you've been idle for about a second. Turn it off with **Corner combos: place fighters in the corner** on the Profiling tab. The REFramework menu has **Place fighters in the corner now** / **Midscreen now** buttons and a spacing slider. SF6's own option works too: hold left or right while pressing the reset-position button in Training.
+
+## The web page
+
+Three tabs along the top:
+
+- **Combo Training:** the combo list for one character on the left, the selected combo on the right with two big sub-tabs.
+  - Each combo in the list is coloured by how far it's profiled: dark red with nothing found, turning green as it fills in. Windows count for two thirds and sweet spots for the last third (the last step has no sweet spot, so its window counts in full). A window counts as found once it has three clean presses and a failed press just outside each edge.
+  - Clicking a combo loads it in game, in the mode of the open sub-tab. Switching sub-tabs switches the game's mode too.
+  - **Profiling** (game in Develop): how far it's profiled, **Profile in game**, **Reset profile**, profiling options, the **Research bot** and the timing profile chart and table.
+  - **Training** (game in Train): **Train in game**, today's attempts and streak, session options (Train view, song mode, motion arrows, spam blocker, overlay layout) and the training history. Options go to the game as you change them.
+- **Combo Database:** every character in a grid; pick one to see their combos with their profiled %, and add, edit, import or delete them.
+  - **Experimental** combos have their own section. New and imported combos start out experimental (untick it if you know the combo works). One is verified automatically after its first clean run, yours or the bot's, and **Mark verified** / **Mark experimental** flips it by hand.
+- **Hub Sync:** the data folder and the hub connection (below).
 
 ## Workflow
 
-1. In the web page, choose a character and type the combo, for example
+1. In **Combo Database**, pick a character, click **+ New combo** and type it, for example
    `2LP > 2LP, 5LK > DR > 5LP, 5HP > DR > 5HK, 5MP~4HP > [2]8HK`.
    - `>` means cancel, `,` means link, `~` means chain or target combo.
    - `cr.MK`, `j.HP`, `[2]8HK`, `236P`, `DR`, `DI`, `66`, `SA2` and Modern buttons (`L M H SP`) all work.
    - Click a step chip to change what counts as its trigger press, or whether it is a hit or a movement step.
-2. Click **Develop in game** and go to Training mode.
-3. Do the combo many times.
+   - `Section: name` groups it under that section in the lists.
+2. In **Combo Training → Profiling**, click the combo (or **Profile in game**) and go to Training mode.
+3. Do the combo many times, or let the research bot do it.
    - Each attempt adds samples; the cyan windows grow as you go.
    - Drop it early and late on purpose too: those failures pin the window edges down.
-4. When every step has a window, press **F5** in game (or click **Train in game**).
+4. When the combo is green enough, switch to the **Training** sub-tab (or press **F5** in game).
    - Each press now lands on the bar as a tick inside or outside the window.
    - A drop tells you which step failed and by how many frames.
    - Turn on **Spam blocker** (F8) to fail runs where you pressed a step's button more than once.
    - **Spearmint Twintails view** (F11, or Train view in the page): each upcoming step is a note that flies in and lands on a target ring exactly on that step's target frame. A countdown hand makes one lap per note: it leaves 12 o'clock when the previous note lands and is back at 12 o'clock exactly when the next one lands; the cyan arc it passes through is the window and the white arc is the sweet spot. Each press gets a judgement: SWEET, GOOD, EARLY/LATE by N frames, or why it dropped. Later notes are predicted from each move's usual startup and corrected as the moves actually come out. Notes are the same size as the target ring, and the one you're about to hit is brighter than the rest. Punches fly in from the left and kicks from the right (Drive Rush, DI and supers rise from below), with an option to swap sides. Note colours: **Classic** (light red, medium white, heavy blue) or **SF6** (light blue, medium yellow, heavy red). "Note flight" sets how many frames each note is in the air.
-   - **Motion arrows** (session options, or the REFramework menu): shows motions as arrows instead of numpad numbers, in the overlay and on the web page. `623HP` becomes a Z with its head pointing forward plus HP, `236` reads as down curving into a forward arrow, `41236` is a "C" ending forward, `360` a circle, `214214` two quarter circles, `[2]8` a held down arrow then up, and `66` two forward arrows. Arrows are drawn for the 1P side (facing right), the way the notation is written.
+   - **Motion arrows** (on by default; session options or the REFramework menu): shows motions as arrows instead of numpad numbers, in the overlay and on the web page. `623HP` becomes a Z with its head pointing forward plus HP, `236` reads as down curving into a forward arrow, `41236` is a "C" ending forward, `360` a circle, `214214` two quarter circles, `[2]8` a held down arrow then up, and `66` two forward arrows. Arrows are drawn for the 1P side (facing right), the way the notation is written.
    - **Strike Fixation view** (Train view dropdown, or F11 to cycle): a DDR-style chart with four lanes, **motion | light | medium | heavy**. Each step is a row of notes that rises to the receptors at the top and lands on the step's target frame.
      - **Motion lane:** the motion as an arrow (623 as a Z, 214 as a quarter circle, `[↓]↑` for charge), or DR / DI / SA as text.
      - **Strength lanes:** P, K or PK in the strength's lane, in the note palette's colours. A button of any strength (`236K`) or an OD (`236PP`) is one bar across all three.
      - **Window:** the cyan bracket around each row is that step's press window.
      - **Feedback:** receptors flash with the judgement, and a combo counter counts up.
      - The lanes can sit left, centre or right of the screen (session options).
-   - **Song mode** (Train, either view): instead of starting when your first hit lands, a count-in plays (3, 2, 1) and step 1 gets its own note on the downbeat. The rest of the combo follows on a fixed timeline at its ideal cadence (each step's target frame plus its usual startup), with notes visible from further out (80 frames by default). After each attempt it re-arms when you're idle. If the first note goes by untouched, or two notes in a row do, it restarts with a new count-in. **Follow my hits** re-times the remaining notes from the moves that actually come out, so the guide stays exact if you're early or late on one step. In bar view the playhead is larger and brighter, starts in a count-in section in front of step 1 (its beat ticks light up 3, 2, 1) and reaches step 1 on the downbeat, then runs along the bar following the song.
+   - **Song mode** (on by default; Train, any view): instead of starting when your first hit lands, a count-in plays (3, 2, 1) and step 1 gets its own note on the downbeat. The rest of the combo follows on a fixed timeline at its ideal cadence (each step's target frame plus its usual startup), with notes visible from further out (80 frames by default). After each attempt it re-arms when you're idle. If the first note goes by untouched, or two notes in a row do, it restarts with a new count-in. **Follow my hits** re-times the remaining notes from the moves that actually come out, so the guide stays exact if you're early or late on one step. In bar view the playhead is larger and brighter, starts in a count-in section in front of step 1 (its beat ticks light up 3, 2, 1) and reaches step 1 on the downbeat, then runs along the bar following the song.
    - **Rhythm guide:** once a step's move starts, a glowing playhead runs through the next segment in real game frames and flashes on the middle of the window (white notches mark it). Between attempts a dimmer playhead loops the whole combo's cadence: each step's mid-window press plus that move's usual press-to-startup delay. Both can be switched off in the session options.
 
 | Key | Action |
 |---|---|
-| F5 | Develop / Train |
+| F5 | Profiling (Develop) / Training (Train) |
 | F6 | next combo |
 | F7 | detail table (Develop) |
 | F8 | spam blocker |
 | F9 | hide overlay |
+| F10 | research bot (current combo) |
+| F11 | Train view |
 
 The same options are in the REFramework menu (Insert), under **ComboLab**. That menu also has a **Diagnostics** section.
 

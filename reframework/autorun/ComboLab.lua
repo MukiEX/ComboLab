@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.12.1"
+local VERSION = "1.13.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -36,8 +36,8 @@ local DEFAULTS = {
     note_approach = 36,        -- note flight time in frames
     note_flip = false,
     note_palette = "classic",
-    motion_arrows = false,
-    song_mode = false,         -- Train: count-in, then the whole combo on a fixed timeline
+    motion_arrows = true,
+    song_mode = true,          -- Train: count-in, then the whole combo on a fixed timeline
     song_beat = 30,            -- count-in beat length in frames
     song_approach = 80,        -- note flight time in song mode (frames)
     song_follow = false,       -- re-time remaining notes from the hits that land  -- note colours: "classic" (red/white/blue) | "sf6" (blue/yellow/red)         -- true: kicks from the left, punches from the right
@@ -61,6 +61,11 @@ local DEFAULTS = {
 local cfg = {}
 local function load_cfg()
     local c = json.load_file(CFG_PATH) or {}
+    -- 1.13 turned motion arrows and song mode on by default; move older configs over once
+    if next(c) ~= nil and (tonumber(c.defaults_rev) or 1) < 2 then
+        c.motion_arrows, c.song_mode = true, true
+    end
+    c.defaults_rev = 2
     for k, v in pairs(DEFAULTS) do
         if c[k] == nil then c[k] = v end
     end
@@ -449,7 +454,8 @@ local function handle_command(c)
         end
     elseif cmd == "reset_stats" then
         S.stats = { n = 0, ok = 0, streak = 0, best = 0 }
-        if S.combo then session = { combo_id = S.combo.id, attempts = {} }; json.dump_file(session_path(S.combo.id), session) end
+        -- keep_history: only today's numbers start over (the page's "Reset today")
+        if S.combo and not c.keep_history then session = { combo_id = S.combo.id, attempts = {} }; json.dump_file(session_path(S.combo.id), session) end
     elseif cmd == "bot_start" then
         scan_combos()
         local ids = c.ids
@@ -810,7 +816,7 @@ re.on_draw_ui(function()
     changed, v = imgui.slider_float("Overlay scale", cfg.scale, 0.5, 2.0); if changed then cfg.scale = v; save_cfg() end
     changed, v = imgui.slider_float("Overlay height", cfg.y, 0.02, 0.9); if changed then cfg.y = v; save_cfg() end
 
-    if imgui.tree_node("Training bot") then
+    if imgui.tree_node("Research bot") then
         if S.bot.running then
             local b = S.bot:status()
             imgui.text(string.format("combo %d/%d: %s", b.queue_pos, b.queue_len, tostring(b.combo_name)))

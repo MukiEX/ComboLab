@@ -202,6 +202,24 @@ for k = 2, 4 do
     check(r2 and r2.windows[k] and r2.windows[k].E == r.windows[k].E and r2.windows[k].L == r.windows[k].L, "step " .. k .. " same window on the second run")
 end
 check(r2 and r2.attempts < r.attempts, "second run is quicker")
+-- an experimental combo that can't work: "all combos" runs give up after 30 dry attempts
+FILES["ComboLab\\combos\\guile-exp.json"] = {
+    id = "guile-exp", name = "Impossible", fighter = "Guile", fighter_id = 18, hash = "exp1", experimental = true,
+    notation = "5HP, 5HP",
+    steps = {
+        { label = "5HP", sep = "start", kind = "hit", trigger = { type = "button", mask = 64, mode = "all" } },
+        { label = "5HP", sep = ",", kind = "hit", trigger = { type = "button", mask = 64, mode = "all" } },
+    },
+}
+FILES["ComboLab\\command.json"] = { seq = 4, cmd = "bot_start", ids = { "guile-exp" }, options = { reps = 1, experimental_limit = 30 } }
+n = 0
+repeat
+    for _ = 1, 600 do frame() end
+    n = n + 600
+until (FILES["ComboLab\\bot\\guile-exp.json"] and not (FILES["ComboLab\\status.json"].bot or {}).running) or n > 400000
+local r3 = FILES["ComboLab\\bot\\guile-exp.json"]
+print("experimental:", r3 and r3.ok, r3 and r3.reason, "attempts", r3 and r3.attempts)
+check(r3 and not r3.ok and tostring(r3.reason):find("experimental") and r3.attempts == 30, "experimental combo given up after 30 dry attempts")
 print(fail == 0 and "bot test OK" or (fail .. " failed"))
 local fo = os.getenv("BOT_OUT")
 if fo then
