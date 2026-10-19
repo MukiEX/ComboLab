@@ -109,7 +109,21 @@ function Speed.discover()
             }
             -- a float near 1 is a multiplier, near 100 a percentage; an enum
             -- or small int is an index into the menu's choices (can't go past it)
-            if c.type == "System.Single" or c.type == "System.Double" then
+            if c.type == "app.training.GameSpeed" then
+                -- Training's Game Speed: SPEED_50 = 0 ... SPEED_100 = 5 ... SPEED_150 = 10
+                -- (the menu only offers 100% / 50%, the game has all eleven).
+                -- Set it, flag it, and have the training manager apply it.
+                cand.kind = "tspeed"
+                cand.label = "Training Game Speed (" .. c.path .. ")"
+                local set_raw = cand.set
+                cand.set = function(x)
+                    local ok = set_raw(x)
+                    if not ok then return false end
+                    pcall(obj.set_field, obj, "Is_Speed_Setting", x ~= 5)
+                    local ok2 = pcall(tm.call, tm, "ForceGameSpeedSettingApply")
+                    return ok2
+                end
+            elseif c.type == "System.Single" or c.type == "System.Double" then
                 cand.kind = (c.value > 10) and "percent" or "mult"
             elseif not c.enum and c.value >= 50 and c.value <= 200 then
                 cand.kind = "percent"
@@ -128,6 +142,7 @@ end
 local function value_for(c, mult)
     if c.kind == "percent" then return math.floor(100 * mult + 0.5) end
     if c.kind == "mult" then return (c.base ~= 0 and c.base or 1.0) * mult end
+    if c.kind == "tspeed" then return math.max(5, math.min(10, 5 + math.floor((mult - 1) * 10 + 0.5))) end
     return nil
 end
 
@@ -167,6 +182,12 @@ function Speed.best()
 end
 
 -- ---------------------------------------------------------------- test
+-- the most a candidate can do (Training's Game Speed stops at 150%)
+function Speed.max_mult(key)
+    if key and key:find("OS_Game_Speed", 1, true) then return 1.5 end
+    return nil
+end
+
 -- Speed.start_test(get_tick, mult): each candidate in turn: settle 0.5 s,
 -- measure 2 s, restore, settle. Call Speed.update() every rendered frame.
 function Speed.start_test(get_tick, mult)
@@ -377,6 +398,7 @@ function Speed.status()
         candidates = cands, base_fps = Speed.base_fps, testing = Speed.test ~= nil, error = Speed.error,
         active = Speed.active and { key = Speed.active.key, mult = Speed.active.mult } or nil,
         best = Speed.best(), fps = rate.fps, results = Speed.results, scan = Speed.last_scan,
+        max_mult = Speed.max_mult(Speed.best()),
     }
 end
 

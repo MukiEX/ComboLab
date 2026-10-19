@@ -251,7 +251,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
           <label class="switch"><input type="checkbox" id="botReset"> Replace existing profile</label>
         </div>
         <div class="row" style="gap:14px;align-items:flex-end;margin-top:12px">
-          <label class="f">Research speed <select id="botSpeed"><option value="1">1x (normal)</option><option value="1.5">1.5x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option></select></label>
+          <label class="f">Research speed <select id="botSpeed"><option value="1">1x (normal)</option><option value="1.2">1.2x</option><option value="1.3">1.3x</option><option value="1.4">1.4x</option><option value="1.5">1.5x</option></select></label>
           <button class="btn small" id="btnSpeedTest" style="margin-bottom:3px">Test speed settings</button>
           <button class="btn small" id="btnSpeedScan" style="margin-bottom:3px" title="Lists every speed-related setting in the game into speed_scan.json (the game freezes a few seconds)">Scan game</button>
           <span id="speedStatus" class="ink2" style="font-size:12.5px;margin-bottom:6px"></span>
@@ -513,7 +513,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.15.2";
+const PAGE_VERSION = "1.16.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1593,13 +1593,13 @@ function renderSpeed() {
   const sp = st.status && st.status.speed;
   const box = $("speedStatus");
   if (!sp) { box.textContent = ""; return; }
-  if (!speedSynced && sp.research_speed) { $("botSpeed").value = String(sp.research_speed); speedSynced = true; }
+  if (!speedSynced && sp.research_speed) { $("botSpeed").value = String(Math.min(1.5, sp.research_speed)); if (!$("botSpeed").value) $("botSpeed").value = "1.5"; speedSynced = true; }
   const res = Object.entries(sp.results || {});
   const best = sp.best;
   let t;
   if (sp.testing) t = "Testing in game… hands off";
   else if (sp.error) t = `<span style="color:var(--critical)">${esc(sp.error)}</span>`;
-  else if (best) t = `Speed test passed: <b>${esc(((sp.results || {})[best]?.ratio || 0).toFixed(1))}x</b> real frames at the 2x test (${esc(best)})`;
+  else if (best) t = `Speed test passed: <b>${esc(((sp.results || {})[best]?.ratio || 0).toFixed(2))}x</b> real frames${/OS_Game_Speed/.test(best) ? " with Training's own Game Speed (it goes up to 150%)" : " (" + esc(best) + ")"}`;
   else if (sp.base_fps) t = `<span style="color:var(--warning)">The speed test found no setting that runs more frames; the bot stays at 1x.</span>`;
   else t = `<span class="muted">Run <b>Test speed settings</b> once (Training mode, a combo loaded) before using more than 1x.</span>`;
   if (sp.active) t += ` · <b>${sp.active.mult}x on</b>`;

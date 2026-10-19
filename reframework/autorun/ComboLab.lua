@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.15.2"
+local VERSION = "1.16.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -906,8 +906,8 @@ re.on_draw_ui(function()
         end
         if st.error then imgui.text_colored(st.error, 0xFF5555FF) end
         if imgui.button("Scan the game for speed settings (freezes a few seconds)") then handle_command({ cmd = "speed_scan" }) end
-        local ch, v = imgui.slider_float("Research speed (x)", cfg.research_speed or 1, 1, 4)
-        if ch then cfg.research_speed = math.floor(v * 4 + 0.5) / 4; save_cfg() end
+        local ch, v = imgui.slider_float("Research speed (x)", cfg.research_speed or 1, 1, 1.5)
+        if ch then cfg.research_speed = math.floor(v * 10 + 0.5) / 10; save_cfg() end
         if st.fps then imgui.text(string.format("battle now: %.1f frames/s%s", st.fps, Speed.active and string.format("  (%.2gx on)", Speed.active.mult) or "")) end
         imgui.tree_pop()
     end

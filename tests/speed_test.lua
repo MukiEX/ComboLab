@@ -10,18 +10,20 @@ local global_speed = 1.0
 local function mkfield(name, tname, static) return {
     get_name = function() return name end, is_static = function() return static or false end,
     get_type = function() return { get_full_name = function() return tname end,
-        is_a = function(_, x) return x == "System.Enum" and tname == "app.SpeedType" end,
+        is_a = function(_, x) return x == "System.Enum" and (tname == "app.SpeedType" or tname == "app.training.GameSpeed") end,
         is_value_type = function() return tname ~= "app.TrainingData" end } end } end
-local tdata = { GameSpeed = 1.0, SpeedIndex = 0 }
+local tdata = { GameSpeed = 1.0, SpeedIndex = 0, OS_Game_Speed = 5, Is_Speed_Setting = false }
+local applied_speed = 5        -- what the battle runs at after ForceGameSpeedSettingApply
 local tdata_obj = {
     get_address = function() return 2 end,
     get_field = function(_, n) return tdata[n] end, set_field = function(_, n, v) tdata[n] = v end,
-    get_type_definition = function() return { get_fields = function() return { mkfield("GameSpeed", "System.Single"), mkfield("SpeedIndex", "app.SpeedType"), mkfield("Other", "System.Int32") } end,
+    get_type_definition = function() return { get_fields = function() return { mkfield("GameSpeed", "System.Single"), mkfield("SpeedIndex", "app.SpeedType"), mkfield("Other", "System.Int32"), mkfield("OS_Game_Speed", "app.training.GameSpeed") } end,
         get_parent_type = function() return nil end } end,
 }
 tdata.Other = 5
 local tm = {
     get_address = function() return 1 end,
+    call = function(_, m) if m == "ForceGameSpeedSettingApply" then applied_speed = tdata.OS_Game_Speed end end,
     get_field = function(_, n) if n == "_tData" then return tdata_obj end end,
     get_type_definition = function() return { get_fields = function() return { mkfield("_tData", "app.TrainingData") } end,
         get_parent_type = function() return nil end } end,
@@ -52,22 +54,27 @@ local ticks = 0
 Speed.start_test(function() return math.floor(ticks) end, 2)
 for _ = 1, 60 * 30 do
     CLK = CLK + 1 / 60
-    ticks = ticks + global_speed
+    ticks = ticks + (0.5 + 0.1 * applied_speed)
     Speed.update()
     if not Speed.test then break end
 end
 check(not Speed.test, "test finished")
 check(Speed.base_fps and math.abs(Speed.base_fps - 60) < 2, "baseline ~60 fps")
 local rg = Speed.results["global"]
-check(rg and rg.ok and math.abs(rg.ratio - 2) < 0.1, "global speed gives 2x real frames")
+check(rg and not rg.ok, "global speed gives no extra frames (as in SF6)")
+local TS = "training:TrainingManager._tData.OS_Game_Speed"
+local rs = Speed.results[TS]
+check(rs and rs.ok and math.abs(rs.ratio - 1.5) < 0.05, "Training Game Speed gives 1.5x")
 local rt = Speed.results["training:TrainingManager._tData.GameSpeed"]
 check(rt and not rt.ok, "animation-only speed rejected")
-check(Speed.best() == "global", "best is the global speed")
-check(global_speed == 1.0 and tdata.GameSpeed == 1.0, "everything restored after the test")
+check(Speed.best() == TS, "best is Training Game Speed")
+check(global_speed == 1.0 and tdata.GameSpeed == 1.0 and tdata.OS_Game_Speed == 5 and applied_speed == 5, "everything restored after the test")
 -- apply / restore
-check(Speed.apply("global", 3) and global_speed == 3, "applied 3x")
+check(Speed.apply(TS, 1.3) and tdata.OS_Game_Speed == 8 and applied_speed == 8 and tdata.Is_Speed_Setting, "1.3x = SPEED_130, applied")
 Speed.restore()
-check(global_speed == 1.0 and not Speed.active, "restored")
+check(tdata.OS_Game_Speed == 5 and applied_speed == 5 and not tdata.Is_Speed_Setting and not Speed.active, "restored to 100%")
+check(Speed.apply(TS, 4) and tdata.OS_Game_Speed == 10, "capped at SPEED_150")
+Speed.restore()
 check(not Speed.apply("training:TrainingManager._tData.SpeedIndex", 2), "index setting refused")
 -- scan: walks the training manager and gBattle's statics
 json = { dump_file = function(p, v) DUMP = v; return true end }
