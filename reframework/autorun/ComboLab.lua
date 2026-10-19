@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.7.0"
+local VERSION = "1.8.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -16,6 +16,8 @@ local Profile = require("combolab.profile")
 local Game = require("combolab.game")
 local Overlay = require("combolab.overlay")
 local Bot = require("combolab.bot")
+local MoveData = require("combolab.movedata")
+local Predict = require("combolab.predict")
 
 local DIR = "ComboLab\\"
 local CFG_PATH = DIR .. "config.json"
@@ -46,7 +48,9 @@ local DEFAULTS = {
     result_seconds = 4,
     user_side = 0,
     timeout = 90,
-    use_hook = true,           -- false = safe mode (no game hook; restart the game after changing)
+    use_hook = true,
+    predict = true,            -- predict windows from the game's frame data
+    pred_cal = {},             -- measured-vs-predicted edge offsets, per combo step           -- false = safe mode (no game hook; restart the game after changing)
     last_cmd_seq = 0,
     keys = { mode = 0x74, next = 0x75, detail = 0x76, spam = 0x77, overlay = 0x78, bot = 0x79, view = 0x7A }, -- F5..F11
 }
@@ -185,6 +189,7 @@ local function load_combo(id)
             S.tracker:set_combo(c, prof)
             S.last = nil
             load_session(c.id)
+            facts_wanted = true
             cfg.combo_id = c.id
             save_cfg()
             if reset then flash("Combo changed since its profile was recorded: profile reset")
@@ -225,6 +230,75 @@ local function compact(res)
              result = res.result, steps = steps }
 end
 
+-- ---------------------------------------------------------------- predictions
+-- Calibration: steps whose edges were pinned down by misses on both sides tell
+-- us how far the frame-data prediction is off; the average shift is applied
+-- to every prediction of that kind (cancel / link).
+local function rebuild_cal()
+    local cal = {}
+    for _, e in pairs(cfg.pred_cal or {}) do
+        if type(e) == "table" and e.kind then
+            local c = cal[e.kind] or { dE = 0, dL = 0, n = 0 }
+            c.dE, c.dL, c.n = c.dE + (e.dE or 0), c.dL + (e.dL or 0), c.n + 1
+            cal[e.kind] = c
+        end
+    end
+    Profile.CAL = cal
+end
+rebuild_cal()
+Profile.PREDICT = cfg.predict ~= false
+
+local function summarize(f)
+    if not f then return nil end
+    return { id = f.id, main = f.main, follow = f.follow, margin = f.margin, frame = f.frame, hit = f.hit }
+end
+
+local facts_done = {}     -- "combo:k" -> true once read from the game this session
+local facts_wanted = false
+
+local function refresh_facts()
+    local P = S.profile
+    if not cfg.predict or not P or not S.combo or not in_training or not fighter_id then return end
+    local changed = false
+    for k = 2, #S.combo.steps do
+        local ida, idb = P:candidate_id(k - 1), P:candidate_id(k)
+        local st = P.steps[k]
+        local f = st.facts
+        local key = S.combo.id .. ":" .. k
+        if ida and (not facts_done[key] or not f or f.ida ~= ida or f.idb ~= idb) then
+            local A = MoveData.facts(Game.user or 0, fighter_id, ida)
+            if A then
+                local B = idb and MoveData.facts(Game.user or 0, fighter_id, idb) or nil
+                local cancel = nil
+                if S.combo.steps[k].sep ~= "," and idb then cancel = MoveData.cancel_ranges(Game.user or 0, fighter_id, A, idb) end
+                P:set_facts(k, { a = summarize(A), b = summarize(B), cancel = cancel, ida = ida, idb = idb, fighter = fighter_id })
+                changed = true
+                if idb then facts_done[key] = true end
+            end
+        end
+    end
+    if changed then save_profile(); status_dirty = true end
+end
+
+local function calibrate()
+    local P = S.profile
+    if not P or not S.combo then return end
+    local changed = false
+    for k = 2, #S.combo.steps do
+        local w = P:window(k)
+        if w and not w.pred and w.n >= 4 and w.E_lo == w.E - 1 and w.L_hi == w.L + 1 then
+            local raw = P:prediction(k, true)
+            if raw and not raw.impossible then
+                local id = S.combo.id .. ":" .. tostring(S.combo.hash) .. ":" .. k
+                local e = { kind = raw.kind, dE = w.E - raw.E, dL = w.L - raw.L }
+                local old = cfg.pred_cal[id]
+                if not old or old.dE ~= e.dE or old.dL ~= e.dL then cfg.pred_cal[id] = e; changed = true end
+            end
+        end
+    end
+    if changed then rebuild_cal(); P._win = {}; save_cfg() end
+end
+
 local function on_attempt(res)
     local P = S.profile
     if not P then return end
@@ -253,6 +327,8 @@ local function on_attempt(res)
             st.streak = 0
         end
     end
+    pcall(refresh_facts)
+    pcall(calibrate)
     save_profile()
     if session then
         local list = session.attempts
@@ -317,9 +393,11 @@ local last_poll, last_status = 0, 0
 
 local function apply_options(o)
     if type(o) ~= "table" then return end
-    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows" }) do
+    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows", "predict" }) do
         if o[k] ~= nil then cfg[k] = o[k] == true end
     end
+    Profile.PREDICT = cfg.predict ~= false
+    if S.profile then S.profile._win = {} end
     if o.train_view == "bar" or o.train_view == "notes" or o.train_view == "both" then cfg.train_view = o.train_view end
     if o.note_flip ~= nil then cfg.note_flip = o.note_flip == true end
     if o.song_mode ~= nil then cfg.song_mode = o.song_mode == true; S.song = nil end
@@ -409,7 +487,7 @@ local function write_status()
             user_side = cfg.user_side, overlay = cfg.overlay, enabled = cfg.enabled,
             rhythm = cfg.rhythm, rhythm_demo = cfg.rhythm_demo,
             train_view = cfg.train_view, note_approach = cfg.note_approach, note_flip = cfg.note_flip, note_palette = cfg.note_palette,
-            motion_arrows = cfg.motion_arrows,
+            motion_arrows = cfg.motion_arrows, predict = cfg.predict,
             song_mode = cfg.song_mode, song_follow = cfg.song_follow, song_approach = cfg.song_approach, song_beat = cfg.song_beat,
         },
         bot = S.bot:status(),
@@ -542,6 +620,9 @@ re.on_frame(function()
             local info = Game.side_info(Game.user)
             if info.fighter_id and info.fighter_id ~= fighter_id then
                 fighter_id = info.fighter_id
+                MoveData.clear()
+                facts_done = {}
+                facts_wanted = true
                 S.tracker:reset_learning()
                 status_dirty = true
             end
@@ -568,6 +649,11 @@ re.on_frame(function()
         last_poll = now
         local ok, err = pcall(poll_commands)
         if not ok then last_error = tostring(err) end
+    end
+    if facts_wanted and in_training and fighter_id and S.profile then
+        facts_wanted = false
+        local ok, err = pcall(refresh_facts)
+        if not ok then last_error = "frame data: " .. tostring(err) end
     end
     if now - sync.last > 5 then
         sync.last = now
@@ -642,6 +728,8 @@ re.on_draw_ui(function()
     if changed then cfg.note_flip = v; save_cfg() end
     changed, v = imgui.checkbox("Safe mode: no game hook (restart game to apply)", cfg.use_hook == false)
     if changed then cfg.use_hook = not v; save_cfg() end
+    changed, v = imgui.checkbox("Predict windows from game frame data", cfg.predict ~= false)
+    if changed then cfg.predict = v; Profile.PREDICT = v; save_cfg(); if S.profile then S.profile._win = {} end end
     changed, v = imgui.checkbox("Rhythm guide (Train)", cfg.rhythm ~= false); if changed then cfg.rhythm = v; save_cfg() end
     imgui.same_line()
     changed, v = imgui.checkbox("Cadence preview between attempts", cfg.rhythm_demo ~= false); if changed then cfg.rhythm_demo = v; save_cfg() end
@@ -688,7 +776,27 @@ re.on_draw_ui(function()
             for k, st in ipairs(S.combo.steps) do
                 imgui.text(string.format("  %d %-8s id %s  mask 0x%X %s", k, st.label,
                     tostring(S.profile:learned_id(k)), st.trigger.mask or 0, st.kind))
+                local f = S.profile.steps[k].facts
+                if f and f.a then
+                    local A = f.a
+                    local adv = Predict.advantage(A, S.profile.sit)
+                    local w = S.profile:window(k)
+                    local cr = {}
+                    for _, r in ipairs(f.cancel or {}) do cr[#cr + 1] = r.s .. "-" .. (r.e - 1) end
+                    imgui.text(string.format("      prev move %s: startup %s  recovers %s  hitstun %s  hitstop %s  adv %s%s",
+                        tostring(A.id), A.main and (A.main + 1) or "-", tostring(A.margin),
+                        A.hit and A.hit.stun and tostring(A.hit.stun[S.profile.sit] or A.hit.stun.st) or "-",
+                        A.hit and tostring(A.hit.stop_o) or "-", adv and string.format("%+d", adv) or "-",
+                        #cr > 0 and ("  cancel " .. table.concat(cr, ",")) or ""))
+                    if w then
+                        imgui.text(string.format("      predicted %s..%s (%s)   measured %s",
+                            tostring(w.pred_E), tostring(w.pred_L), tostring(w.pred_kind),
+                            w.pred and "none yet" or string.format("%d..%d", w.E, w.L)))
+                    end
+                end
             end
+            if imgui.button("Re-read frame data") then MoveData.clear(); facts_done = {}; pcall(refresh_facts) end
+            if MoveData.last_error then imgui.text("frame data: " .. tostring(MoveData.last_error)) end
         end
         if last_error or Game.last_error then imgui.text_colored("error: " .. tostring(last_error or Game.last_error), 0xFF4040FF) end
         imgui.tree_pop()

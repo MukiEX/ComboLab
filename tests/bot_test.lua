@@ -123,6 +123,15 @@ FILES["ComboLab\\config.json"] = { result_seconds = 0 }
 
 dofile("reframework/autorun/ComboLab.lua")
 
+-- BOT_PRED="2:E:L,3:E:L,..." stands in for windows predicted from game data
+if os.getenv("BOT_PRED") then
+    local pred = {}
+    for k, e, l in os.getenv("BOT_PRED"):gmatch("(%d+):(%-?%d+):(%-?%d+)") do
+        pred[tonumber(k)] = { kind = "test", E = tonumber(e), L = tonumber(l) }
+    end
+    require("combolab.profile").prediction = function(_, k) return pred[k] end
+end
+
 local clock = 0
 os.clock = function() return clock end
 local DIRS = { [0] = 5, [1] = 8, [2] = 2, [4] = 4, [8] = 6, [5] = 7, [6] = 1, [9] = 9, [10] = 3 }
@@ -178,4 +187,11 @@ check(r.windows[4].L == 6, "5HP late edge = 6")
 check(prof.windows[3].sweet_hi and prof.windows[3].sweet_hi < prof.windows[3].L, "late DR presses flagged by the sweet spot")
 check(r.clean == r.clean_of, "validation runs all clean")
 print(fail == 0 and "bot test OK" or (fail .. " failed"))
+local fo = os.getenv("BOT_OUT")
+if fo then
+    local f = io.open(fo, "w")
+    f:write(string.format("%d", r.attempts))
+    for k = 2, 4 do f:write(string.format(" %d:%d:%d", k, r.windows[k].E, r.windows[k].L)) end
+    f:close()
+end
 os.exit(fail == 0 and 0 or 1)

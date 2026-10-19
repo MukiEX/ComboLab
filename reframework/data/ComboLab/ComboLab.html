@@ -216,6 +216,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
         <label class="switch"><input type="checkbox" id="optSpam"> Spam blocker <span class="muted">(Train)</span></label>
         <label class="switch"><input type="checkbox" id="optRhythm" checked> Rhythm guide <span class="muted">(Train)</span></label>
         <label class="switch"><input type="checkbox" id="optDemo" checked> Cadence preview</label>
+        <label class="switch"><input type="checkbox" id="optPredict" checked> Predict windows from frame data</label>
         <label class="switch"><input type="checkbox" id="optLearn"> Keep learning in Train</label>
         <label class="switch"><input type="checkbox" id="optDetail"> Detail table</label>
         <label class="switch"><input type="checkbox" id="optIgnoreSpam" checked> Ignore spammed samples</label>
@@ -397,7 +398,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.7.0";
+const PAGE_VERSION = "1.8.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -858,7 +859,7 @@ function optionsFromForm() {
     spam_block: $("optSpam").checked, learn_in_train: $("optLearn").checked, show_detail: $("optDetail").checked,
     ignore_spam_samples: $("optIgnoreSpam").checked, user_side: $("optP2").checked ? 1 : 0,
     scale: +$("optScale").value, y: +$("optY").value,
-    rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked,
+    rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked, predict: $("optPredict").checked,
     train_view: $("optView").value, note_approach: +$("optApproach").value, note_flip: $("optFlip").checked, note_palette: $("optPalette").value,
     motion_arrows: $("optArrows").checked,
     song_mode: $("optSong").checked, song_follow: $("optFollow").checked, song_approach: +$("optSongApproach").value, song_beat: +$("optSongBeat").value,
@@ -870,7 +871,7 @@ function optionsToForm(o) {
   $("optSpam").checked = !!o.spam_block; $("optLearn").checked = !!o.learn_in_train;
   $("optDetail").checked = !!o.show_detail; $("optIgnoreSpam").checked = o.ignore_spam_samples !== false;
   $("optP2").checked = o.user_side === 1;
-  $("optRhythm").checked = o.rhythm !== false; $("optDemo").checked = o.rhythm_demo !== false;
+  $("optRhythm").checked = o.rhythm !== false; $("optDemo").checked = o.rhythm_demo !== false; $("optPredict").checked = o.predict !== false;
   if (o.train_view) $("optView").value = o.train_view;
   if (o.note_approach) $("optApproach").value = o.note_approach;
   $("optFlip").checked = !!o.note_flip;
@@ -910,16 +911,18 @@ function renderProfile() {
   }
   const steps = c.steps;
   const W = arr(P.windows); P.steps = arr(P.steps);
+  const hasPred = W.some((w, i) => i > 0 && w && w.pred_E != null);
   const rate = P.attempts ? Math.round(100 * P.successes / P.attempts) : 0;
   let html = `<div class="tiles">
     <div class="tile"><div class="v">${P.attempts || 0}</div><div class="l">develop attempts</div></div>
     <div class="tile"><div class="v">${P.successes || 0}</div><div class="l">clean (${rate}%)</div></div>
     <div class="tile"><div class="v">${W.filter((w, i) => i > 0 && w && w.n).length}/${Math.max(0, steps.length - 1)}</div><div class="l">steps with a window</div></div>
+    ${hasPred ? `<div class="tile"><div class="v">${W.filter((w, i) => i > 0 && w && w.pred_E != null).length}/${Math.max(0, steps.length - 1)}</div><div class="l">predicted from frame data</div></div>` : ""}
   </div>`;
   // shared frame axis
   let lo = Infinity, hi = -Infinity;
   const consider = v => { if (typeof v === "number" && isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } };
-  steps.forEach((s, i) => { if (i === 0) return; const w = W[i]; if (w && w.n) { consider(w.E_soft); consider(w.L_soft); consider(w.o); } arr(P.steps[i]?.samples).forEach(x => consider(x.p)); });
+  steps.forEach((s, i) => { if (i === 0) return; const w = W[i]; if (w && w.n) { consider(w.E_soft); consider(w.L_soft); consider(w.o); } if (w && w.pred_E != null) { consider(w.pred_E); consider(w.pred_L); } arr(P.steps[i]?.samples).forEach(x => consider(x.p)); });
   if (!isFinite(lo)) { lo = 0; hi = 20; }
   lo = Math.floor(lo) - 2; hi = Math.ceil(hi) + 2;
   const rowH = 34, left = 110, right = 16, top = 26;
@@ -949,6 +952,9 @@ function renderProfile() {
       if (w.sweet_lo != null) svg += `<rect class="hov" data-k="win${i}" x="${fx(w.sweet_lo) + 1}" y="${y + 12}" width="${Math.max(2, (w.sweet_hi - w.sweet_lo + 1) * cell - 2)}" height="${rowH - 24}" fill="var(--sweet)" rx="2"/>`;
       if (typeof w.o === "number") svg += `<line x1="${fx(w.o)}" x2="${fx(w.o)}" y1="${y + 3}" y2="${y + rowH - 3}" stroke="var(--warning)" stroke-width="2"/>`;
     }
+    if (w && w.pred_E != null && w.pred_L >= w.pred_E) {
+      svg += `<rect class="hov" data-k="pred${i}" x="${fx(w.pred_E) + 1}" y="${y + 4}" width="${Math.max(2, (w.pred_L - w.pred_E + 1) * cell - 2)}" height="${rowH - 8}" fill="none" stroke="var(--ink-2)" stroke-width="1.5" stroke-dasharray="4 3" rx="4"/>`;
+    }
     const samples = arr(P.steps[i]?.samples).slice(-80);
     const counts = {};
     samples.forEach(sm => {
@@ -963,10 +969,10 @@ function renderProfile() {
     });
   });
   svg += `</svg>`;
-  html += `<div class="legend"><span><i style="background:var(--firm)"></i>clean press range</span><span><i style="background:var(--sweet);outline:1px solid var(--firm)"></i>sweet spot (also keeps the next step alive)</span><span><i style="background:var(--soft)"></i>estimated edge (from drops / hitstun left)</span><span><i style="background:var(--good);border-radius:50%"></i>clean press</span><span style="color:var(--critical)">✕</span><span style="margin-left:-10px">failed press</span><span><i style="background:var(--warning);width:3px"></i>you were free to act (links)</span></div>`;
+  html += `<div class="legend"><span><i style="background:var(--firm)"></i>clean press range</span><span><i style="background:var(--sweet);outline:1px solid var(--firm)"></i>sweet spot (also keeps the next step alive)</span><span><i style="background:var(--soft)"></i>estimated edge (from drops / hitstun left)</span><span><i style="background:var(--good);border-radius:50%"></i>clean press</span><span style="color:var(--critical)">✕</span><span style="margin-left:-10px">failed press</span><span><i style="background:var(--warning);width:3px"></i>you were free to act (links)</span>${hasPred ? `<span><i style="background:none;outline:1.5px dashed var(--ink-2);outline-offset:-2px"></i>predicted from the game's frame data</span>` : ""}</div>`;
   html += `<div class="chart">${svg}</div>`;
   // table
-  html += `<div class="chart"><table class="t" style="margin-top:14px;min-width:760px"><thead><tr><th>#</th><th>Step</th><th></th><th>Clean / samples</th><th>Press window</th><th>Sweet spot</th><th>Estimated edge</th><th>Came out at</th><th>Free at</th><th>Hit lands</th><th>Opp. recovers</th><th>Hitstun to spare</th></tr></thead><tbody>`;
+  html += `<div class="chart"><table class="t" style="margin-top:14px;min-width:760px"><thead><tr><th>#</th><th>Step</th><th></th><th>Clean / samples</th><th>Press window</th><th>Frame data</th><th>Sweet spot</th><th>Estimated edge</th><th>Came out at</th><th>Free at</th><th>Hit lands</th><th>Opp. recovers</th><th>Hitstun to spare</th></tr></thead><tbody>`;
   steps.forEach((s, i) => {
     const w = W[i] || {}; const sm = arr(P.steps[i]?.samples);
     const okN = sm.filter(x => x.res === "ok").length;
@@ -974,6 +980,7 @@ function renderProfile() {
     html += `<tr><td class="muted">${i + 1}</td><td class="m">${labelHTML(s.label)}</td><td class="muted">${i ? (s.sep === "," ? "link" : s.sep === "~" ? "chain" : "cancel") : "start"}</td>
       <td>${i ? `${okN} / ${sm.length}` : "–"}</td>
       <td>${w.n ? `<b>${rng(w.E, w.L)}</b> <span class="muted">(${w.L - w.E + 1}f)</span>` : "–"}</td>
+      <td>${w.pred_E != null ? (w.pred_L < w.pred_E ? `<span style="color:var(--warning)">${esc(w.pred_kind || "")} looks impossible</span>` : `${rng(w.pred_E, w.pred_L)} <span class="muted">(${w.pred_kind || ""}${w.n ? (w.pred_E === w.E && w.pred_L === w.L ? ", matches" : `, off by ${w.E - w.pred_E >= 0 ? "+" : ""}${w.E - w.pred_E} / ${w.L - w.pred_L >= 0 ? "+" : ""}${w.L - w.pred_L}`) : ""})</span>`) : "–"}</td>
       <td>${w.sweet_lo != null ? `<b>${rng(w.sweet_lo, w.sweet_hi)}</b> <span class="muted">(${Math.round(100 * w.sweet_rate)}% next hits vs ${Math.round(100 * (w.next_rate || 0))}% overall, ${w.sweet_n} runs)</span>` : (w.n && i < steps.length - 1 ? `<span class="muted">${w.sweet_n || 0}/8 runs</span>` : "–")}</td>
       <td>${w.n && (w.E_soft !== w.E || w.L_soft !== w.L) ? rng(w.E_soft, w.L_soft) : "–"}</td>
       <td>${rng(w.q_min, w.q_max)}</td><td>${w.o != null ? "+" + Math.floor(w.o) : (i && s.sep !== "," ? "cancel" : "–")}</td>
@@ -986,6 +993,9 @@ function renderProfile() {
       if (el.dataset.p != null) {
         const {i, sm} = pts[+el.dataset.p];
         showTip(e, `<b>${esc(steps[i].label)}</b> pressed at <b>+${sm.p}f</b><br>${RES_LABEL[sm.res] || sm.res}${sm.q != null ? `, came out at +${sm.q}` : ""}${sm.r ? `, ${sm.r}f hitstun left` : ""}${sm.spam ? `<br>${sm.spam} extra press${sm.spam > 1 ? "es" : ""}` : ""}<br><span class="muted">${sm.mode === "train" ? "train" : "develop"}</span>`);
+      } else if (el.dataset.k.startsWith("pred")) {
+        const i = +el.dataset.k.slice(4); const w = W[i];
+        showTip(e, `<b>${esc(steps[i].label)}</b><br>predicted from the game's frame data: +${w.pred_E} to +${w.pred_L} (${esc(w.pred_kind || "")})<br><span class="muted">the bot checks these edges first</span>`);
       } else {
         const i = +el.dataset.k.slice(3); const w = W[i];
         showTip(e, `<b>${esc(steps[i].label)}</b><br>clean presses +${w.E} to +${w.L} (${w.n} samples)${w.sweet_lo != null ? `<br>sweet spot +${w.sweet_lo} to +${w.sweet_hi}: next step lands ${Math.round(100 * w.sweet_rate)}% of the time` : ""}${w.E_soft !== w.E || w.L_soft !== w.L ? `<br>estimated edge +${w.E_soft} to +${w.L_soft}` : ""}`);

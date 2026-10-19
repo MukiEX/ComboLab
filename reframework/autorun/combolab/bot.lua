@@ -205,6 +205,7 @@ function Bot:begin_phase(phase, k)
         if c.N < 2 then return self:begin_phase("C") end
         c.sweep = { d = c.plans[k].lead + 1, res = {}, mode = "scan" }
         c.d = c.sweep.d
+        self:seed(k)
     elseif phase == "B" then
         if not self.sweet or k > c.N - 1 then return self:begin_phase("C") end
         local w = c.win[k]
@@ -221,6 +222,30 @@ function Bot:begin_phase(phase, k)
         c.d = nil
     end
     self:prep()
+end
+
+-- Start from the window predicted from the game's frame data, if there is one:
+-- probe just outside and just inside both edges. If all four agree the window
+-- is found; otherwise fall back to the normal scan.
+function Bot:seed(k)
+    local c = self.cur
+    local sw = c.sweep
+    if sw.seeded or not c.profile or not c.profile.prediction then return false end
+    local ok, pred = pcall(c.profile.prediction, c.profile, k)
+    if not ok or not pred or pred.impossible then return false end
+    local dmin = c.plans[k].lead + 1
+    if pred.L < dmin or pred.E > self.dmax then return false end
+    local E, L = math.max(dmin, pred.E), math.min(self.dmax, pred.L)
+    sw.seeded = true
+    sw.mode = "seed"
+    sw.pE, sw.pL = E, L
+    sw.list, sw.li = {}, 1
+    for _, d in ipairs({ E - 1, E, L, L + 1 }) do
+        if d >= dmin and d <= self.dmax then sw.list[#sw.list + 1] = d end
+    end
+    c.d = sw.list[1]
+    self.env.trace(string.format("step %d: predicted window %d..%d from frame data", k, pred.E, pred.L))
+    return true
 end
 
 function Bot:offset(k)
@@ -302,6 +327,26 @@ function Bot:on_result(res)
         sw.res[c.d] = r
         local dmin = c.plans[k].lead + 1
         local label = c.combo.steps[k].label
+        -- predicted window: check its edges first
+        if sw.mode == "seed" then
+            sw.li = sw.li + 1
+            if sw.list[sw.li] then c.d = sw.list[sw.li]; return self:prep() end
+            local function works(d) local x = sw.res[d]; return x and x.n > 0 and x.ok / x.n >= 0.5 end
+            local function fails(d) local x = sw.res[d]; return (d < dmin or d > self.dmax) or (x and x.n > 0 and x.ok / x.n < 0.5) end
+            if works(sw.pE) and works(sw.pL) and fails(sw.pE - 1) and fails(sw.pL + 1) then
+                sw.E, sw.L = sw.pE, sw.pL
+                sw.mode = "confirm"
+                self.env.trace(string.format("step %d: prediction confirmed", k))
+            else
+                self.env.trace(string.format("step %d: prediction was off; searching", k))
+                sw.mode = "scan"
+                sw.last_fail = nil
+                c.d = dmin
+                return self:prep()
+            end
+        end
+        -- the move came out for the first time: a prediction may be possible now
+        if sw.mode == "scan" and not good and not sw.seeded and self:seed(k) then return self:prep() end
         -- coarse-to-fine search: scan in strides, then bisect each edge
         if sw.mode == "scan" then
             if good then

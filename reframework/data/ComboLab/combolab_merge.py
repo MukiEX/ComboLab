@@ -105,6 +105,9 @@ def merge(a, b, max_samples=MAX_SAMPLES):
                 for key, n in _map(db.get(f)).items():
                     m[str(key)] = _intify(max(_f(m.get(str(key))), _f(n)))
             st[f] = m
+        facts = da.get("facts") if isinstance(da.get("facts"), dict) else db.get("facts")
+        if isinstance(facts, dict):
+            st["facts"] = facts
         seen, samples = set(), []
 
         def take(s, mine):

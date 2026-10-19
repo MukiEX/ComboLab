@@ -120,6 +120,29 @@ Position comes from the combo name ("corner" in the name means corner) unless yo
 
 The same options are in the REFramework menu (Insert), under **ComboLab**. That menu also has a **Diagnostics** section.
 
+## Windows predicted from the game's frame data
+
+Once ComboLab knows which move each step is (after the move has come out once), it reads both moves' frame data straight from the game and predicts the step's window before you've practised it. The data path comes from alphaZomega's MMDK (MIT).
+
+| Data | Used for |
+|---|---|
+| Startup, recovery, active frames | Link windows: you can act once the previous move recovers |
+| Cancel ranges and which moves they allow | Cancel and chain windows |
+| Hitstun and hitstop, with counter-hit / Punish Counter variants | When the opponent recovers ("PC" or "CH" in the combo name picks those) |
+
+- **Bar:** a predicted window shows as a hollow cyan box until real samples replace it. Train mode can grade against it straight away.
+- **Bot:** checks the predicted edges first (one press just outside and just inside each edge). When they hold, the window is found in four attempts instead of a search; when they don't, it searches as before.
+- **Calibration:** steps whose edges get pinned down by misses on both sides are compared with their prediction, and the average offset (per cancel / link) is applied to later predictions once three such steps exist.
+- **Web page:** the profile tab draws predicted windows as dashed boxes. The table's **Frame data** column shows each prediction and how far the measured window was from it.
+- **Diagnostics** (REFramework menu) lists each step's startup, recovery, hitstun, hitstop, on-hit advantage, cancel ranges, and predicted vs measured window. **Re-read frame data** refreshes after a game patch.
+
+Predictions are approximate:
+- They assume the hit lands on the first active frame.
+- Multi-hit moves, projectiles and juggles (where hitstun depends on the air state) can be off.
+- Combos that depend on spacing can't be predicted at all.
+
+Turn it off with **Predict windows from frame data** in the session options.
+
 ## What is measured
 
 - **Clock.** Everything is counted in game frames, ticked by a hook on `nBattle.cPlayer.pl_input_sub`. If that hook ever stops firing, the mod falls back to render frames, and Diagnostics shows the tick source.
@@ -189,5 +212,7 @@ node tests/parser.test.js
 lua tests/bot_test.lua
 lua tests/plans_test.lua
 lua tests/motion_test.lua
+lua tests/predict_test.lua
+lua tests/movedata_test.lua
 python3 tests/hub_test.py
 ```

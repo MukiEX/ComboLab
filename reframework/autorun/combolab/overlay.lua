@@ -216,7 +216,11 @@ local function draw_segment(x, y, w, h, k, S, press, sc)
     local cell = w / span
 
     draw.filled_rect(x, y, w, h, C.bg)
-    if win then
+    if win and win.pred then
+        -- predicted from frame data, nothing measured yet: hollow window
+        draw.filled_rect(fx(win.E), y, (win.L - win.E + 1) * cell, h, rgba(0, 235, 245, 55))
+        draw.outline_rect(fx(win.E), y + 1, (win.L - win.E + 1) * cell, h - 2, C.cyan)
+    elseif win then
         draw.filled_rect(fx(win.E_soft), y, (win.L_soft - win.E_soft + 1) * cell, h, C.cyan_d)
         draw.filled_rect(fx(win.E), y, (win.L - win.E + 1) * cell, h, C.cyan)
         if win.sweet_lo then
@@ -972,6 +976,8 @@ function Overlay.detail(S, W, H, sc, f)
             elseif w.E_soft ~= w.E or w.L_soft ~= w.L then
                 s = s .. "  (" .. fmt_range(w.E_soft, w.L_soft) .. ")"
             end
+            if w.pred then s = s .. "  est. from frame data"
+            elseif w.pred_E then s = s .. "  (data " .. fmt_range(w.pred_E, w.pred_L) .. ")" end
             text_at(x0 + cols[5], y, s, C.cyan, f)
             text_at(x0 + cols[6], y, fmt_range(w.q_min, w.q_max), C.white, f)
             text_at(x0 + cols[7], y, w.o and ("+" .. math.floor(w.o)) or (st.sep == ">" and "cancel" or "-"), C.yellow, f)

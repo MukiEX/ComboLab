@@ -8,8 +8,11 @@
 --   o  you were free to act (links only)    k  this step connected
 --   r  opponent hitstun left just before k  (k + r = when they would have recovered)
 
+local Predict = require("combolab.predict")
+
 local Profile = {}
 Profile.__index = Profile
+Profile.CAL = nil             -- prediction calibration, set from config
 
 local MAX_SAMPLES = 300
 Profile.MAX_SAMPLES = MAX_SAMPLES
@@ -41,6 +44,9 @@ function Profile.new(combo)
     end
     self.combo = combo
     self._win = {}
+    -- counter-hit combos are predicted with the matching hitstun
+    local nm = " " .. tostring(combo.name or "") .. " "
+    self.sit = (nm:find("[%s:%(]PC[%s,%)]") and "pc") or (nm:find("[%s:%(]CH[%s,%)]") and "ch") or "st"
     return self
 end
 
@@ -70,6 +76,7 @@ function Profile.from_table(t, combo)
         local dst = self.steps[k]
         if type(src.ids) == "table" then for a, n in pairs(src.ids) do dst.ids[key(a)] = tonumber(n) or 0 end end
         if type(src.tail) == "table" then for a, n in pairs(src.tail) do dst.tail[key(a)] = tonumber(n) or 0 end end
+        if type(src.facts) == "table" then dst.facts = src.facts end
         if type(src.samples) == "table" then
             for _, s in ipairs(src.samples) do
                 if type(s) == "table" then
@@ -93,11 +100,50 @@ function Profile:to_table()
         neutral = self.neutral, steps = {}, windows = {},
     }
     for k, st in ipairs(self.steps) do
-        out.steps[k] = { label = st.label, ids = st.ids, tail = st.tail, samples = st.samples }
+        out.steps[k] = { label = st.label, ids = st.ids, tail = st.tail, samples = st.samples, facts = st.facts }
         local w = self:window(k)
         out.windows[k] = w or { n = 0 }
     end
     return out
+end
+
+-- --------------------------------------------------------------------------
+-- predictions from game frame data (facts filled in by ComboLab.lua)
+-- --------------------------------------------------------------------------
+-- the move a step uses: its learned id, else the move most often seen for it
+function Profile:candidate_id(k)
+    local id = self:learned_id(k)
+    if id then return id end
+    local st = self.steps[k]
+    if not st then return nil end
+    local n, best, bn = {}, nil, 0
+    for _, s in ipairs(st.samples) do
+        if s.act then
+            n[s.act] = (n[s.act] or 0) + 1
+            if n[s.act] > bn then best, bn = s.act, n[s.act] end
+        end
+    end
+    return best
+end
+
+function Profile:set_facts(k, facts)
+    local st = self.steps[k]
+    if not st then return end
+    st.facts = facts
+    self._win = {}
+end
+
+-- raw = true skips calibration (used to calibrate)
+Profile.PREDICT = true
+function Profile:prediction(k, raw)
+    if not Profile.PREDICT then return nil end
+    local st = self.steps[k]
+    local f = st and st.facts
+    if type(f) ~= "table" or not f.a then return nil end
+    local step = self.combo.steps[k]
+    local dqs = {}
+    for _, s in ipairs(st.samples) do if s.res == "ok" and s.q and s.p then dqs[#dqs + 1] = s.q - s.p end end
+    return Predict.window(step.sep, f.a, f.b, f.cancel, { sit = self.sit, dq = median(dqs), cal = (not raw) and Profile.CAL or nil })
 end
 
 function Profile:learned_id(k)
@@ -159,10 +205,20 @@ function Profile:window(k)
             end
         end
     end
+    local pred = self:prediction(k)
     if w.n == 0 then
-        self._win[k] = false
-        return nil
+        if not pred or pred.impossible then
+            self._win[k] = false
+            return nil
+        end
+        -- nothing measured yet: use the window predicted from the game's frame data
+        local pw = { n = 0, fails = w.fails, pred = true, pred_kind = pred.kind, pred_E = pred.E, pred_L = pred.L,
+                     E = pred.E, L = pred.L, E_soft = pred.E, L_soft = pred.L, width = pred.L - pred.E + 1,
+                     mid = (pred.E + pred.L) / 2, dq = median(dqs) or Predict.DQ }
+        self._win[k] = pw
+        return pw
     end
+    if pred then w.pred_kind, w.pred_E, w.pred_L, w.pred_impossible = pred.kind, pred.E, pred.L, pred.impossible end
     -- early/late failures inside the observed range are noise from other causes
     if w.E_lo and w.E_lo >= w.E then w.E_lo = nil end
     if w.L_hi and w.L_hi <= w.L then w.L_hi = nil end
@@ -384,6 +440,7 @@ function Profile:merge(t)
             for a, n in pairs(as_list(src.ids)) do st.ids[key(a)] = math.max(st.ids[key(a)] or 0, tonumber(n) or 0) end
             for a, n in pairs(as_list(src.tail)) do st.tail[key(a)] = math.max(st.tail[key(a)] or 0, tonumber(n) or 0) end
         end
+        if st.facts == nil and type(src.facts) == "table" then st.facts = src.facts end
         local seen, out = {}, {}
         local function take(s, mine)
             if type(s) ~= "table" then return end
