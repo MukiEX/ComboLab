@@ -281,6 +281,7 @@ function Speed.scan(path)
     local app = global_candidate()
     if app then live[#live + 1] = "via.Application.GlobalSpeed = " .. tostring(app.base) end
     json.dump_file(path, { types_scanned = n, matches = out, live = live })
+    Speed.last_scan = { time = os.time(), types = types, scanned = n, live = #live }
     Speed.log(string.format("scan: %d of %d types mention speed; written to %s", types, n, path))
     return true, types
 end
@@ -306,7 +307,7 @@ function Speed.status()
     return {
         candidates = cands, base_fps = Speed.base_fps, testing = Speed.test ~= nil, error = Speed.error,
         active = Speed.active and { key = Speed.active.key, mult = Speed.active.mult } or nil,
-        best = Speed.best(), fps = rate.fps, results = Speed.results,
+        best = Speed.best(), fps = rate.fps, results = Speed.results, scan = Speed.last_scan,
     }
 end
 

@@ -1603,6 +1603,7 @@ function renderSpeed() {
   else if (sp.base_fps) t = `<span style="color:var(--warning)">The speed test found no setting that runs more frames; the bot stays at 1x.</span>`;
   else t = `<span class="muted">Run <b>Test speed settings</b> once (Training mode, a combo loaded) before using more than 1x.</span>`;
   if (sp.active) t += ` · <b>${sp.active.mult}x on</b>`;
+  if (sp.scan) t += `<br><span class="muted">Scan ${agoS(sp.scan.time)}: ${sp.scan.types} type${sp.scan.types === 1 ? "" : "s"} with speed settings (of ${sp.scan.scanned}), saved to <span style="font-family:var(--mono)">reframework/data/ComboLab/speed_scan.json</span></span>`;
   if (sp.fps && (sp.active || sp.testing)) t += ` · ${sp.fps.toFixed(0)} frames/s`;
   box.innerHTML = t;
   if (res.length && !best && !sp.testing) box.title = res.map(([k, r]) => `${k}: ${r.note || ""}`).join("\n");
