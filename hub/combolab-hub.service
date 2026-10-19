@@ -1,0 +1,14 @@
+# Without Docker: copy to /etc/systemd/system/, adjust paths/user, then
+#   systemctl enable --now combolab-hub
+[Unit]
+Description=ComboLab hub
+After=network.target
+
+[Service]
+User=combolab
+WorkingDirectory=/opt/ComboLab/hub
+ExecStart=/usr/bin/python3 /opt/ComboLab/hub/combolab_hub.py serve --data /var/lib/combolab-hub
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

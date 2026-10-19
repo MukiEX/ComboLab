@@ -7,3 +7,5 @@ reframework/data/ComboLab/command.json
 reframework/data/ComboLab/config.json
 __pycache__/
 *.pyc
+reframework/data/ComboLab/shared/
+reframework/data/ComboLab/sync.json

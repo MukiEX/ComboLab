@@ -1,0 +1,12 @@
+# From the repository root:  docker compose -f hub/docker-compose.yml up -d --build
+# Add a machine:             docker compose -f hub/docker-compose.yml run --rm hub add-machine gaming-pc
+services:
+  hub:
+    build:
+      context: ..
+      dockerfile: hub/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8770:8770"     # only your reverse proxy should reach it
+    volumes:
+      - ./data:/data:z             # :z for SELinux hosts

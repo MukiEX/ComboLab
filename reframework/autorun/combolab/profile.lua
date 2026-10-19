@@ -12,6 +12,8 @@ local Profile = {}
 Profile.__index = Profile
 
 local MAX_SAMPLES = 300
+Profile.MAX_SAMPLES = MAX_SAMPLES
+Profile.MACHINE = "local"     -- set from config: tags samples recorded on this PC
 
 local function key(a) return tostring(a) end
 
@@ -47,7 +49,10 @@ end
 function Profile.from_table(t, combo)
     if type(t) ~= "table" or t.combo_id ~= combo.id or t.combo_hash ~= combo.hash
         or type(t.steps) ~= "table" or #t.steps ~= #combo.steps then
-        return Profile.new(combo), (type(t) == "table")
+        local fresh = Profile.new(combo)
+        -- a reset written while the combo wasn't loaded ({ reset = true })
+        if type(t) == "table" and t.reset then fresh.reset_at = tonumber(t.reset_at) or os.time(); return fresh, false end
+        return fresh, (type(t) == "table")
     end
     local self = Profile.new(combo)
     self.attempts = tonumber(t.attempts) or 0
@@ -55,6 +60,8 @@ function Profile.from_table(t, combo)
     self.train_attempts = tonumber(t.train_attempts) or 0
     self.train_successes = tonumber(t.train_successes) or 0
     self.seq = tonumber(t.seq) or 0
+    self.reset_at = tonumber(t.reset_at)
+    self.shared_rev = t.shared_rev
     if type(t.neutral) == "table" then
         for k, v in pairs(t.neutral) do if v then self.neutral[key(k)] = true end end
     end
@@ -82,7 +89,7 @@ function Profile:to_table()
         combo_id = self.combo_id, combo_hash = self.combo_hash, fighter_id = self.fighter_id,
         attempts = self.attempts, successes = self.successes,
         train_attempts = self.train_attempts, train_successes = self.train_successes,
-        seq = self.seq or 0,
+        seq = self.seq or 0, reset_at = self.reset_at, shared_rev = self.shared_rev,
         neutral = self.neutral, steps = {}, windows = {},
     }
     for k, st in ipairs(self.steps) do
@@ -308,6 +315,7 @@ function Profile:learn(res, mode)
                     p = o.p, q = o.q, o = o.o, r = o.r, k = o.k, res = o.res,
                     spam = o.spam or 0, mode = mode, act = o.act,
                     a = self.seq, nx = nx, full = res.ok and 1 or 0,
+                    t = os.time(), u = Profile.MACHINE .. "-" .. os.time() .. "-" .. self.seq,
                 }
                 while #st.samples > MAX_SAMPLES do table.remove(st.samples, 1) end
             end
@@ -325,6 +333,83 @@ end
 function Profile:reset()
     local fresh = Profile.new(self.combo)
     for k, v in pairs(fresh) do self[k] = v end
+    -- merging with other machines drops anything recorded before this moment
+    self.reset_at = os.time()
+end
+
+-- --------------------------------------------------------------------------
+-- merging profiles from other machines (same rules as combolab_merge.py)
+-- --------------------------------------------------------------------------
+local function numstr(v)
+    if v == nil then return "-" end
+    if type(v) == "number" then return tostring(math.tointeger(v) or v) end
+    return tostring(v)
+end
+
+-- stable id for a sample; samples from before 1.7 get one from their content
+function Profile.sample_uid(k, s)
+    if s.u ~= nil then return tostring(s.u) end
+    return "L" .. k .. ":" .. numstr(s.a) .. ":" .. numstr(s.p) .. ":" .. numstr(s.q) .. ":" .. tostring(s.res or "-")
+end
+
+local function as_list(v) return type(v) == "table" and v or {} end
+
+-- Merges profile table `t` (decoded JSON from the hub) into this profile.
+-- Samples are unioned by id; counters and learned ids take the larger value;
+-- a newer reset on either side drops everything recorded before it.
+-- Returns the number of samples added.
+function Profile:merge(t)
+    if type(t) ~= "table" or t.combo_id ~= self.combo_id or t.combo_hash ~= self.combo_hash then return 0 end
+    local ra, rb = tonumber(self.reset_at) or 0, tonumber(t.reset_at) or 0
+    local R = math.max(ra, rb)
+    local a_full, b_full = ra == R, rb == R
+    local tsteps = as_list(t.steps)
+    if not a_full then
+        -- the other side reset more recently: keep only our newer samples
+        for _, f in ipairs({ "attempts", "successes", "train_attempts", "train_successes", "seq" }) do self[f] = 0 end
+        self.neutral = {}
+        for _, st in ipairs(self.steps) do st.ids, st.tail = {}, {} end
+    end
+    if b_full then
+        for _, f in ipairs({ "attempts", "successes", "train_attempts", "train_successes", "seq" }) do
+            self[f] = math.max(tonumber(self[f]) or 0, tonumber(t[f]) or 0)
+        end
+        for a in pairs(as_list(t.neutral)) do self.neutral[key(a)] = true end
+    end
+    if R > 0 then self.reset_at = R end
+    local added = 0
+    for k, st in ipairs(self.steps) do
+        local src = tsteps[k] or {}
+        if b_full then
+            for a, n in pairs(as_list(src.ids)) do st.ids[key(a)] = math.max(st.ids[key(a)] or 0, tonumber(n) or 0) end
+            for a, n in pairs(as_list(src.tail)) do st.tail[key(a)] = math.max(st.tail[key(a)] or 0, tonumber(n) or 0) end
+        end
+        local seen, out = {}, {}
+        local function take(s, mine)
+            if type(s) ~= "table" then return end
+            if R > 0 and (tonumber(s.t) or 0) < R then return end
+            local u = Profile.sample_uid(k, s)
+            if seen[u] then return end
+            seen[u] = true
+            s.u = u
+            for f, v in pairs(s) do if type(v) == "number" then s[f] = math.tointeger(v) or v end end
+            out[#out + 1] = s
+            if not mine then added = added + 1 end
+        end
+        for _, s in ipairs(st.samples) do take(s, true) end
+        for _, s in ipairs(as_list(src.samples)) do take(s, false) end
+        table.sort(out, function(x, y)
+            local tx, ty = tonumber(x.t) or 0, tonumber(y.t) or 0
+            if tx ~= ty then return tx < ty end
+            local ax, ay = tonumber(x.a) or 0, tonumber(y.a) or 0
+            if ax ~= ay then return ax < ay end
+            return x.u < y.u
+        end)
+        while #out > MAX_SAMPLES do table.remove(out, 1) end
+        st.samples = out
+    end
+    self._win = {}
+    return added
 end
 
 return Profile

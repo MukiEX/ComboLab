@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 TOKEN = None
-ALLOWED_DIRS = ("", "combos", "profiles", "sessions")
+ALLOWED_DIRS = ("", "combos", "profiles", "sessions", "shared", "bot")
 
 
 def safe_path(rel):
@@ -162,6 +162,7 @@ def main():
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--token", default=None, help="optional shared secret; the page asks for it once")
     ap.add_argument("--root", default=ROOT, help="ComboLab data folder (default: this script's folder)")
+    ap.add_argument("--no-sync", action="store_true", help="don't run the hub sync agent even if sync.json exists")
     a = ap.parse_args()
     ROOT = os.path.abspath(a.root)
     TOKEN = a.token
@@ -175,6 +176,13 @@ def main():
             print("  other device: http://%s:%d" % (ip, a.port))
     if TOKEN:
         print("  token required: %s" % TOKEN)
+    if not a.no_sync and os.path.isfile(os.path.join(ROOT, "sync.json")):
+        import threading
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import combolab_sync
+        agent = combolab_sync.Agent(ROOT)
+        threading.Thread(target=agent.run_forever, daemon=True).start()
+        print("  hub sync:     %s" % agent.hub)
     print("Ctrl+C to stop.")
     try:
         srv.serve_forever()

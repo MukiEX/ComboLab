@@ -132,6 +132,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
     <span class="pill" id="pillFolder"><span class="dot"></span><span>No folder</span></span>
     <span class="pill" id="pillGame"><span class="dot"></span><span>Game: unknown</span></span>
     <span class="pill" id="pillActive"><span>Nothing loaded in game</span></span>
+    <span class="pill" id="pillHub" hidden></span>
   </div>
 </header>
 
@@ -396,7 +397,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.6.0";
+const PAGE_VERSION = "1.7.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -713,6 +714,21 @@ function renderLibrary() {
   }).join("");
   lib.querySelectorAll(".lib-item").forEach(b => b.onclick = () => selectCombo(b.dataset.id));
   lib.querySelectorAll("details.lib-sec").forEach(d => d.addEventListener("toggle", () => { libOpen[d.dataset.key] = d.open; }));
+}
+
+// sync agent status (combolab_sync.py writes shared/_status.json)
+function renderHubStatus(h) {
+  const el = $("pillHub");
+  if (!h || !h.hub) { el.hidden = true; return; }
+  el.hidden = false;
+  const age = Date.now() / 1000 - (h.last_sync || 0);
+  const stale = age > 180;
+  const host = String(h.hub).replace(/^https?:\/\//, "");
+  const when = age < 90 ? "just now" : age < 5400 ? Math.round(age / 60) + " min ago" : Math.round(age / 3600) + " h ago";
+  const dot = h.ok && !stale ? "on" : (h.ok ? "warn" : "off");
+  const txt = h.ok ? (stale ? `Hub: last sync ${when}` : `Hub: synced ${when}`) : "Hub: can't sync";
+  el.title = (h.error ? h.error + "\n" : "") + `${host}${h.machine ? " as " + h.machine : ""}` + (stale ? "\nIs run_server.bat (or run_sync.bat) running?" : "");
+  el.innerHTML = `<span class="dot ${dot}"></span><span>${esc(txt)}</span>`;
 }
 
 function renderHeaderStatus() {
@@ -1062,6 +1078,8 @@ async function pollData(force) {
     if (first) optionsToForm(s.data.options);
     renderHeaderStatus(); renderLibrary(); renderBot();
   } else if (st.status) renderHeaderStatus();
+  const hub = await FS.read("shared/_status.json");
+  renderHubStatus(hub && hub.data);
   if (!st.sel) return;
   let changed = false;
   const p = await FS.read(`profiles/${st.sel}.json`);

@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.6.0"
+local VERSION = "1.7.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -65,6 +65,16 @@ local function load_cfg()
 end
 local function save_cfg() json.dump_file(CFG_PATH, cfg, 2) end
 load_cfg()
+-- a short random id for this PC; tags the samples it records so profiles from
+-- several machines can be merged without counting an attempt twice
+if type(cfg.machine_id) ~= "string" or cfg.machine_id == "" then
+    math.randomseed(os.time() + math.floor(os.clock() * 1000))
+    local abc, id = "abcdefghijklmnopqrstuvwxyz0123456789", ""
+    for _ = 1, 8 do local i = math.random(1, #abc); id = id .. abc:sub(i, i) end
+    cfg.machine_id = id
+    save_cfg()
+end
+Profile.MACHINE = cfg.machine_id
 
 -- ---------------------------------------------------------------- state
 local S = {
@@ -348,7 +358,7 @@ local function handle_command(c)
             save_profile()
             flash("Profile reset")
         elseif c.combo_id then
-            json.dump_file(profile_path(c.combo_id), { reset = true })
+            json.dump_file(profile_path(c.combo_id), { reset = true, reset_at = os.time(), combo_id = c.combo_id })
         end
     elseif cmd == "reset_stats" then
         S.stats = { n = 0, ok = 0, streak = 0, best = 0 }
@@ -448,6 +458,73 @@ local function do_hotkeys()
 end
 
 -- ---------------------------------------------------------------- frame
+-- ---------------------------------------------------------------- hub sync
+-- The sync agent (combolab_sync.py, run by combolab_server.py) writes merged
+-- profiles from the hub to shared/<id>.json and lists them with a revision in
+-- shared/_status.json. The mod stays the only writer of profiles/: it merges
+-- those samples in here, a few combos per check.
+local sync = { last = 0, combos_rev = nil, pending = {}, done = {} }
+local function shared_path(id) return DIR .. "shared\\" .. id .. ".json" end
+
+-- returns true when done, false to retry soon, nil when the combo isn't known
+-- here yet (the agent may still be bringing it over)
+local function merge_shared(id, rev)
+    local loaded = S.combo and S.combo.id == id
+    local entry
+    if not loaded then
+        for _, e in ipairs(combos) do if e.id == id then entry = e end end
+        if not entry then return nil end
+    end
+    if not exists("shared", id .. ".json") then return true end
+    local sh = json.load_file(shared_path(id))
+    if type(sh) ~= "table" then return false end
+    if loaded then
+        -- don't change the windows under a running attempt or the bot
+        if S.bot.running or S.tracker.att then return false end
+        if S.profile.shared_rev == rev then return true end
+        local n = S.profile:merge(sh)
+        S.profile.shared_rev = rev
+        save_profile()
+        if n > 0 then flash(string.format("Hub: merged %d samples from other machines", n)); status_dirty = true end
+        return true
+    end
+    local c = normalize_combo(json.load_file(entry.path))
+    if not c or c.hash ~= sh.combo_hash then return true end
+    local raw = exists("profiles", id .. ".json") and json.load_file(profile_path(id)) or nil
+    local prof = Profile.from_table(raw, c)
+    if prof.shared_rev == rev then return true end
+    local n = prof:merge(sh)
+    prof.shared_rev = rev
+    prof.ignore_spam = cfg.ignore_spam_samples
+    json.dump_file(profile_path(id), prof:to_table())
+    if n > 0 then L("hub: merged %d samples into %s", n, id) end
+    return true
+end
+
+local function sync_tick()
+    if not exists("shared", "_status.json") then return end
+    local st = json.load_file(DIR .. "shared\\_status.json")
+    if type(st) ~= "table" then return end
+    if st.combos_rev ~= nil and st.combos_rev ~= sync.combos_rev then
+        if sync.combos_rev ~= nil then scan_combos(); status_dirty = true end
+        sync.combos_rev = st.combos_rev
+    end
+    if type(st.shared) == "table" then
+        for id, rev in pairs(st.shared) do
+            if sync.done[id] ~= rev then sync.pending[id] = rev end
+        end
+    end
+    local budget = 3
+    for id, rev in pairs(sync.pending) do
+        if budget <= 0 then break end
+        budget = budget - 1
+        local ok, res = pcall(merge_shared, id, rev)
+        if ok and res then sync.pending[id] = nil; sync.done[id] = rev
+        elseif ok and res == nil then sync.pending[id] = nil      -- looked at again next check
+        elseif not ok then last_error = "hub merge: " .. tostring(res); sync.pending[id] = nil; sync.done[id] = rev end
+    end
+end
+
 local training_check = 0
 scan_combos()
 if cfg.combo_id then load_combo(cfg.combo_id) end
@@ -491,6 +568,11 @@ re.on_frame(function()
         last_poll = now
         local ok, err = pcall(poll_commands)
         if not ok then last_error = tostring(err) end
+    end
+    if now - sync.last > 5 then
+        sync.last = now
+        local ok, err = pcall(sync_tick)
+        if not ok then last_error = "hub sync: " .. tostring(err) end
     end
     if (status_dirty and now - last_status > 0.5) or now - last_status > 3 then
         last_status = now

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComboLab Hub</title>
+<style>
+:root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --ring: rgba(255,255,255,0.10);
+  --accent: #3987e5; --accent-ink: #0d0d0d; --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f2f1ed;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #77756f; --ring: rgba(11,11,11,0.10);
+    --accent: #2a78d6; --accent-ink: #ffffff;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 var(--sans); }
+button, input { font: inherit; color: inherit; }
+header { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--ring); flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0; }
+header h1 span { color: var(--muted); font-weight: 400; }
+.sp { flex: 1; }
+main { max-width: 1200px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 16px; min-width: 0; }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+.btn { background: var(--surface-2); border: 1px solid var(--ring); border-radius: 7px; padding: 6px 12px; cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+input[type=password] { background: var(--surface-2); border: 1px solid var(--ring); border-radius: 7px; padding: 7px 10px; width: min(460px, 100%); font-family: var(--mono); }
+.muted { color: var(--muted); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--ring); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+td.m { font-family: var(--mono); }
+td.n { font-variant-numeric: tabular-nums; text-align: right; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+.dot.on { background: var(--good); } .dot.warn { background: var(--warning); }
+.tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--ring); color: var(--ink-2); margin: 0 4px 2px 0; }
+.fighter td { padding-top: 16px; font-weight: 600; color: var(--ink-2); border-bottom: none; }
+.stats { display: flex; gap: 28px; flex-wrap: wrap; }
+.stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12px; color: var(--muted); }
+#err { color: var(--critical); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ComboLab <span>Hub</span></h1>
+  <span class="sp"></span>
+  <span id="who" class="muted"></span>
+  <button class="btn" id="btnExport" hidden>Download everything (JSON)</button>
+  <button class="btn" id="btnLogout" hidden>Forget token</button>
+</header>
+<main>
+  <section class="card" id="login" hidden>
+    <h2>Sign in</h2>
+    <p class="muted" style="margin-top:0">Paste one of your machine tokens (from <code>combolab_hub.py add-machine</code>). It's kept in this browser only.</p>
+    <form id="loginForm" style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="password" id="tok" placeholder="token" autocomplete="off">
+      <button class="btn primary">Open</button>
+    </form>
+    <p id="err"></p>
+  </section>
+  <div id="app" hidden>
+    <section class="card"><div class="stats" id="stats"></div></section>
+    <section class="card" style="margin-top:16px"><h2>Machines</h2><div class="scroll"><table id="machines"></table></div></section>
+    <section class="card" style="margin-top:16px"><h2>Combos and merged profiles</h2><div class="scroll"><table id="combos"></table></div></section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let token = ""; try { token = localStorage.getItem("combolab_hub_token") || ""; } catch (e) {}
+const ago = t => {
+  if (!t) return "never";
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 90) return "just now";
+  if (s < 5400) return Math.round(s / 60) + " min ago";
+  if (s < 129600) return Math.round(s / 3600) + " h ago";
+  return Math.round(s / 86400) + " days ago";
+};
+async function api(path) {
+  const r = await fetch(path, {headers: {Authorization: "Bearer " + token}});
+  if (r.status === 401) throw new Error("That token isn't known to this hub.");
+  if (!r.ok) throw new Error("Hub error " + r.status);
+  return r.json();
+}
+async function load() {
+  if (!token) { $("login").hidden = false; $("app").hidden = true; return; }
+  let d;
+  try { d = await api("api/v1/overview"); }
+  catch (e) { $("err").textContent = e.message; $("login").hidden = false; $("app").hidden = true; return; }
+  $("login").hidden = true; $("app").hidden = false; $("btnExport").hidden = false; $("btnLogout").hidden = false;
+  $("who").textContent = "signed in as " + d.me + " · hub " + d.version;
+  const profs = d.combos.flatMap(c => c.profiles);
+  const samples = d.combos.reduce((n, c) => n + (c.profiles.find(p => p.current)?.samples || 0), 0);
+  $("stats").innerHTML = [[d.machines.length, "machines"], [d.combos.length, "combos"], [profs.filter(p => p.current).length, "profiles"], [samples.toLocaleString(), "samples (current versions)"]]
+    .map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+  const bk = {}; d.backups.forEach(b => { (bk[b.machine] ||= []).push(`${b.count} ${b.kind}`); });
+  $("machines").innerHTML = `<tr><th>Name</th><th>Last sync</th><th>Agent</th><th>Backups</th></tr>` + d.machines.map(m => {
+    const fresh = m.last_seen && Date.now() / 1000 - m.last_seen < 120;
+    return `<tr><td><span class="dot ${fresh ? "on" : m.last_seen ? "warn" : ""}"></span>${esc(m.name)}</td><td>${ago(m.last_seen)}</td><td class="muted">${esc(m.agent || "")}</td><td class="muted">${esc((bk[m.name] || []).join(", ") || "–")}</td></tr>`;
+  }).join("");
+  let html = `<tr><th>Combo</th><th>Notation</th><th class="n">Samples</th><th>Recorded on</th><th>Updated</th></tr>`;
+  let lastF = null;
+  for (const c of d.combos) {
+    if (c.fighter !== lastF) { lastF = c.fighter; html += `<tr class="fighter"><td colspan="5">${esc(c.fighter || "Unknown fighter")}</td></tr>`; }
+    const cur = c.profiles.find(p => p.current);
+    const old = c.profiles.filter(p => !p.current);
+    html += `<tr><td>${esc(c.name)}</td><td class="m">${esc(c.notation)}</td><td class="n">${cur ? cur.samples : "–"}</td>
+      <td>${cur ? cur.origins.map(o => `<span class="tag">${esc(o)}</span>`).join("") : '<span class="muted">no profile yet</span>'}${old.length ? `<div class="muted" style="font-size:12px">${old.length} older version${old.length > 1 ? "s" : ""} kept</div>` : ""}</td>
+      <td class="muted">${cur ? ago(cur.updated) + " · " + esc(cur.by) : ago(c.updated)}</td></tr>`;
+  }
+  $("combos").innerHTML = html;
+}
+$("loginForm").onsubmit = e => { e.preventDefault(); token = $("tok").value.trim(); try { localStorage.setItem("combolab_hub_token", token); } catch (er) {} $("err").textContent = ""; load(); };
+$("btnLogout").onclick = () => { token = ""; try { localStorage.removeItem("combolab_hub_token"); } catch (e) {} location.reload(); };
+$("btnExport").onclick = async () => {
+  const d = await api("api/v1/export");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], {type: "application/json"}));
+  a.download = "combolab-hub-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click();
+};
+load();
+setInterval(() => { if (token && !document.hidden) load(); }, 30000);
+</script>
+</body>
+</html>

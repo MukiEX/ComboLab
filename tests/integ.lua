@@ -23,9 +23,9 @@ log = { info = function(m) LOGLINES[#LOGLINES + 1] = m end }
 fs = { glob = function(pat)
     local out = {}
     local dir = pat:match("^ComboLab\\\\(%a+)\\\\")
-    local want = pat:match("\\\\([%w%-]+)\\%.json%$$")
+    local want = pat:match("\\\\([%w%-_]+)\\%.json%$$")
     for k in pairs(FILES) do
-        local kd, kn = k:match("^ComboLab\\(%a+)\\([%w%-]+)%.json$")
+        local kd, kn = k:match("^ComboLab\\(%a+)\\([%w%-_]+)%.json$")
         if kd == dir and (not want or want == kn) then out[#out + 1] = k end
     end
     return out
@@ -181,6 +181,32 @@ local sess = FILES["ComboLab\\sessions\\guile-test.json"]
 local last = sess.attempts[#sess.attempts]
 print("train result:", last.mode, last.result, "fail step", last.fail_step, "off", last.steps[2].off)
 assert(last.mode == "train" and last.ok == false and last.fail_step == 2 and last.steps[2].off == 3, "late +3 in train")
+
+-- ------------------------------------------------------------ hub sync pickup
+local before = #FILES["ComboLab\\profiles\\guile-test.json"].steps[2].samples
+local s0 = FILES["ComboLab\\profiles\\guile-test.json"].steps[2].samples[1]
+assert(s0.u and s0.t, "new samples carry an id and a time")
+local shared = deep(FILES["ComboLab\\profiles\\guile-test.json"])
+shared.steps[2].samples = {}
+for i = 1, 3 do
+    shared.steps[2].samples[i] = { p = 12, q = 13, res = "ok", spam = 0, mode = "develop", a = i, t = os.time(), u = "zzzz-" .. i }
+end
+FILES["ComboLab\\shared\\guile-test.json"] = shared
+FILES["ComboLab\\combos\\guile-two.json"] = deep(FILES["ComboLab\\combos\\guile-test.json"])
+FILES["ComboLab\\combos\\guile-two.json"].id = "guile-two"
+local shared2 = deep(shared); shared2.combo_id = "guile-two"
+FILES["ComboLab\\shared\\guile-two.json"] = shared2
+FILES["ComboLab\\shared\\_status.json"] = { combos_rev = 1, shared = { ["guile-test"] = 5, ["guile-two"] = 6 } }
+for _ = 1, 400 do frame(0, 5) end      -- first check notes combos_rev
+FILES["ComboLab\\shared\\_status.json"].combos_rev = 2   -- agent pulled a combo: rescan
+for _ = 1, 400 do frame(0, 5) end
+local after = FILES["ComboLab\\profiles\\guile-test.json"]
+assert(#after.steps[2].samples == before + 3 and after.shared_rev == 5, "shared samples merged into the loaded combo")
+local two = FILES["ComboLab\\profiles\\guile-two.json"]
+assert(two and #two.steps[2].samples == 3 and two.shared_rev == 6, "shared profile merged for a combo that isn't loaded")
+for _ = 1, 400 do frame(0, 5) end
+assert(#FILES["ComboLab\\profiles\\guile-test.json"].steps[2].samples == before + 3, "no double merge")
+print("hub pickup OK")
 
 -- overlay drew something
 assert(draws > 0, "overlay drew")

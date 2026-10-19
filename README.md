@@ -28,6 +28,44 @@ Run `reframework/data/ComboLab/run_server.bat` (or `python combolab_server.py`, 
 - `--host 127.0.0.1` keeps it to this PC only. `--port` changes the port.
 - Windows Firewall will ask the first time; allow it on private networks.
 
+## Sync profiles between machines (hub)
+
+The hub is a small server for your own domain that merges every machine's timing samples into one profile per combo, and keeps combos in step. Run it behind your HTTPS reverse proxy; each gaming PC syncs to it with its own token.
+
+**On the server** (Python 3.8+, no packages), from a clone of this repo:
+
+```
+python3 hub/combolab_hub.py add-machine living-room-pc     # prints that PC's token
+python3 hub/combolab_hub.py serve                          # 127.0.0.1:8770, data in hub/data
+```
+
+Or with Docker, from the repo root:
+
+```
+docker compose -f hub/docker-compose.yml up -d --build
+docker compose -f hub/docker-compose.yml run --rm hub add-machine living-room-pc
+```
+
+Point your proxy's subdomain at `127.0.0.1:8770` (`hub/Caddyfile.example`, `hub/nginx.example.conf`; there's also a systemd unit, `hub/combolab-hub.service`). Opening the subdomain in a browser shows an overview: machines, combos, sample counts, and which machines recorded them. Paste any machine token there to sign in. `combolab_hub.py export <folder>` writes everything out as plain JSON files for backups.
+
+**On each gaming PC**, once, in `reframework\data\ComboLab`:
+
+```
+run_sync.bat setup https://combolab.example.com <token>
+```
+
+From then on, **run_server.bat** syncs in the background every 20 seconds (or run `run_sync.bat` on its own). The page's header shows "Hub: synced just now".
+
+**What syncs:**
+
+| Folder | How |
+|---|---|
+| `combos/` | Edits on any PC reach the others. New combos arrive automatically; one you delete on a PC stays deleted there. |
+| `profiles/` | Merged. Every sample carries an ID, so an attempt is never counted twice, and samples from all machines add up (newest 300 per step). |
+| `sessions/`, `bot/` | Backed up per machine. `run_sync.bat restore` brings them back on a fresh install. |
+
+The game stays the only thing that writes `profiles/`. The agent drops the hub's merged copy in `shared/`, and the mod merges it in within a few seconds: straight away for combos that aren't loaded, and between attempts for the one that is (never while the bot is running). Resetting a profile on any machine resets it everywhere, and older samples from other machines don't come back. Profiles recorded before 1.7 merge fine too.
+
 ## Training bot (automatic profiles)
 
 The bot plays combos for you in Training mode and sweeps each step's press timing frame by frame, so profiles come out exact without practice runs. It presses buttons through the same input hook the mod already reads from (the technique Wael3rd's SF6_Tools uses for playback), and it moves both fighters back into position between attempts.
@@ -122,7 +160,9 @@ The same options are in the REFramework menu (Insert), under **ComboLab**. That 
 | `profiles/<id>.json` | game | Samples, learned action IDs and windows per step |
 | `sessions/<id>.json` | game | Last 500 attempts |
 | `status.json` | game | Heartbeat, mode, last result |
-| `config.json` | game | Options, hotkeys |
+| `config.json` | game | Options, hotkeys, this PC's sample tag (`machine_id`) |
+| `sync.json` | `run_sync.bat setup` | Hub address and this PC's token |
+| `shared/` | sync agent | Merged profiles from the hub and sync status (the game merges them into `profiles/`) |
 
 Editing a combo's steps changes its hash, and the old profile resets the next time it is loaded.
 
@@ -148,4 +188,6 @@ lua tests/integ.lua
 node tests/parser.test.js
 lua tests/bot_test.lua
 lua tests/plans_test.lua
+lua tests/motion_test.lua
+python3 tests/hub_test.py
 ```
