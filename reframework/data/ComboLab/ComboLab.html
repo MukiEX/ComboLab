@@ -531,7 +531,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.19.0";
+const PAGE_VERSION = "1.19.1";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -779,7 +779,7 @@ const st = {
   combos: {}, sel: null, draft: null, overrideIdx: null,
   status: null, statusMtime: 0, profile: null, profileMtime: 0, session: null, sessionMtime: 0,
   page: "training", sub: LS.get("sub", "profiling") === "training" ? "training" : "profiling",
-  trainFighter: +LS.get("train_fighter", 0) || null, dbFighter: null,
+  trainFighter: +LS.get("train_fighter", 0) || null, dbFighter: null, gameFighter: 0,
   multi: new Set(), multiAnchor: null,      // sidebar multi-select (bot batch)
   optsSynced: false, modeSentAt: 0,
 };
@@ -1021,7 +1021,7 @@ function renderComboHead() {
   }
   $("ctTitle").textContent = c.name || c.id;
   const ingame = st.status && st.status.combo_id === c.id;
-  $("ctSub").innerHTML = `${esc(FIGHTERS[c.fighter_id] || c.fighter || "")} · ${c.control === "modern" ? "Modern" : "Classic"}${c.experimental ? ` · <span class="exptag">experimental</span>` : ""}${ingame ? ` · <span style="color:var(--good)">loaded in game (${st.status.mode === "train" ? "Training" : "Profiling"})</span>` : ""} · dummy: ${esc(dummyText(c))}`;
+  $("ctSub").innerHTML = `${esc(FIGHTERS[c.fighter_id] || c.fighter || "")} · ${c.control === "modern" ? "Modern" : "Classic"}${c.experimental ? ` · <span class="exptag">experimental</span>` : ""}${ingame ? ` · <span style="color:var(--good)">loaded in game (${st.status.mode === "train" ? "Training" : "Profiling"})</span>` : ""} · dummy: ${esc(dummyText(c))}${st.gameFighter && +c.fighter_id && st.gameFighter !== +c.fighter_id ? ` · <span style="color:var(--warning)">you're playing ${esc(FIGHTERS[st.gameFighter] || "someone else")} in Training</span>` : ""}`;
   const win = st.profile && arr(st.profile.windows);
   $("selChips").innerHTML = arr(c.steps).map((s, i) => {
     const sep = i === 0 ? "" : `<span class="sep">${s.sep === "," ? "," : s.sep === "~" ? "~" : "&gt;"}</span>`;
@@ -1628,6 +1628,17 @@ async function pollData(force) {
     const first = !st.status;
     st.statusMtime = s.mtime; st.status = s.data;
     if (first) { optionsToForm(s.data.options); st.optsSynced = true; }
+    // follow the character picked in Training: the sidebar (and so "all combos"
+    // for the bot) switches to them whenever it changes in game
+    const gf = +s.data.fighter_id || 0;
+    if (gf && gf !== st.gameFighter) {
+      const had = st.gameFighter;
+      st.gameFighter = gf;
+      if (combosFor(gf).length && (had || !st.sel) && +st.trainFighter !== gf) {
+        st.trainFighter = gf; LS.set("train_fighter", gf); st.multi.clear();
+        refreshProfiles();
+      }
+    }
     // the game switched mode by itself (F5): follow it, unless we just asked for one
     if (st.sel && s.data.combo_id === st.sel && s.data.mode && subOf(s.data.mode) !== st.sub && Date.now() - st.modeSentAt > 4000) setSub(subOf(s.data.mode), false);
     for (const r of arr(s.data.bot && s.data.bot.results)) if (r.ok && st.combos[r.id] && st.combos[r.id].experimental) verifyCombo(r.id, "research bot");
