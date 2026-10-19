@@ -486,6 +486,12 @@ local function handle_command(c)
             flash("Testing research speed: hands off for ~15 s")
         end
     elseif cmd == "speed_scan" then
+        if not Speed.watch_core() then
+            -- first scan: catch the battle core on the next frame, then scan
+            S.scan_pending = os.clock()
+            flash("Speed scan: looking for the battle core...")
+            return
+        end
         local ok, done, info = pcall(Speed.scan, DIR .. "speed_scan.json")
         if ok and done then flash(string.format("Speed scan: %d values listed in reframework/data/ComboLab/speed_scan.json", info or 0))
         else flash("Speed scan failed: " .. tostring(ok and info or done)) end
@@ -722,6 +728,10 @@ re.on_frame(function()
         end
     end
     if S.bot.running and not in_training then S.bot:stop("left Training mode") end
+    if S.scan_pending and (Speed.core or os.clock() - S.scan_pending > 2) then
+        S.scan_pending = nil
+        handle_command({ cmd = "speed_scan" })
+    end
     -- research speed: test runs, and never stays on without the bot
     Speed.sample(Game.hook_ticks)
     if Speed.test then

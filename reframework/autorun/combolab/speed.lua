@@ -294,6 +294,26 @@ local function dump_object(obj, path, depth, out, seen, budget, types)
     end
 end
 
+-- app.battle.uBattleCore runs the battle each frame (update / lateUpdate);
+-- remember the instance so the scan can look inside it. Hooked lazily, the
+-- first time a scan is asked for.
+Speed.core = nil
+local core_hooked = false
+function Speed.watch_core()
+    if core_hooked then return true end
+    core_hooked = true
+    local td = safe(sdk.find_type_definition, "app.battle.uBattleCore")
+    local m = td and safe(td.get_method, td, "update")
+    if not m then return false end
+    pcall(sdk.hook, m, function(args)
+        if not Speed.core then
+            local ok, o = pcall(sdk.to_managed_object, args[2])
+            if ok and o then Speed.core = o end
+        end
+    end, nil)
+    return false
+end
+
 function Speed.scan(path)
     local res = { enums = {}, values = {}, methods = {}, roots = {} }
     -- named values of the speed enums we know about
@@ -317,6 +337,11 @@ function Speed.scan(path)
                 end
             end
         end
+    end
+    -- the battle core itself (app.battle.uBattleCore, caught by Speed.watch_core)
+    if Speed.core then
+        res.roots[#res.roots + 1] = "uBattleCore"
+        dump_object(Speed.core, "uBattleCore", 0, res.values, seen, budget, types)
     end
     for tn, ms in pairs(types) do if #ms > 0 then res.methods[tn] = ms end end
     local app = global_candidate()
