@@ -146,6 +146,9 @@ main.single > .card + .card { margin-top: 16px; }
 .lib-item.prof .pc { position: absolute; right: 9px; top: 7px; font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .lib-item.prof:hover { filter: brightness(1.15); }
 .lib-item.prof.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.lib-item.prof.multi { border-color: var(--ink); box-shadow: inset 4px 0 0 var(--ink); }
+.lib-item.prof.multi::after { content: "✓"; position: absolute; right: 9px; bottom: 6px; font-size: 12px; color: var(--ink); }
+.multibar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin-bottom: 8px; border-radius: 7px; background: var(--surface-2); font-size: 12.5px; }
 .exptag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; border: 1px dashed var(--warning); color: var(--warning); white-space: nowrap; }
 .chargrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
 .chargrid button { padding: 9px 11px; border-radius: 8px; border: 1px solid var(--ring); background: var(--surface-2); cursor: pointer; text-align: left; display: flex; justify-content: space-between; gap: 6px; }
@@ -262,7 +265,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
           <button class="btn" id="btnBotAll">Profile all combos for this character</button>
           <button class="btn danger" id="btnBotStop">Stop</button>
         </div>
-        <div class="muted" style="font-size:12px;margin-top:8px">“All combos” skips anything already at 100% and gives up on an <b>experimental</b> combo after 30 attempts in a row without a success.</div>
+        <div class="muted" style="font-size:12px;margin-top:8px">Shift-click or Ctrl-click combos in the list to profile a batch. “All combos” skips anything already at 100% and gives up on an <b>experimental</b> combo after 30 attempts in a row without a success.</div>
         <div id="botStatus" style="margin-top:14px"></div>
       </section>
 
@@ -514,7 +517,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.16.1";
+const PAGE_VERSION = "1.16.2";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -763,6 +766,7 @@ const st = {
   status: null, statusMtime: 0, profile: null, profileMtime: 0, session: null, sessionMtime: 0,
   page: "training", sub: LS.get("sub", "profiling") === "training" ? "training" : "profiling",
   trainFighter: +LS.get("train_fighter", 0) || null, dbFighter: null,
+  multi: new Set(), multiAnchor: null,      // sidebar multi-select (bot batch)
   optsSynced: false, modeSentAt: 0,
 };
 const prof = {};   // combo id -> {mtime, p, wins, winOf, sweets, sweetOf, ok}
@@ -898,7 +902,7 @@ function renderLibrary() {
   const item = c => {
     const p = prof[c.id] ? prof[c.id].p : 0;
     const ingame = st.status && st.status.combo_id === c.id;
-    return `<button class="lib-item prof ${st.sel === c.id ? "sel" : ""}" data-id="${esc(c.id)}" style="background:${profColor(p)}" title="${pctText(p)} profiled">
+    return `<button class="lib-item prof ${st.sel === c.id ? "sel" : ""} ${st.multi.has(c.id) ? "multi" : ""}" data-id="${esc(c.id)}" style="background:${profColor(p)}" title="${pctText(p)} profiled">
       <span class="pc">${pctText(p)}</span>${esc(shortName(c))}${ingame ? ` <span class="muted" style="font-size:11px">· in game</span>` : ""}
       <small>${esc(c.notation || "")}</small></button>`;
   };
@@ -910,7 +914,39 @@ function renderLibrary() {
     const open = libOpen[key] ?? (g.exp || g.list.some(c => c.id === st.sel) || groups.length <= 3);
     return `<details class="lib-sec" data-key="${esc(key)}" ${open ? "open" : ""}><summary${g.exp ? ` style="color:var(--warning)"` : ""}>${esc(g.name)} <span>${g.list.length}</span></summary>${list}</details>`;
   }).join("");
-  lib.querySelectorAll(".lib-item").forEach(b => b.onclick = () => selectCombo(b.dataset.id, {load: true}));
+  // keep only selected combos that are still in this list
+  for (const id of [...st.multi]) if (!items.some(c => c.id === id)) st.multi.delete(id);
+  if (st.multi.size > 1) {
+    lib.insertAdjacentHTML("afterbegin", `<div class="multibar"><b>${st.multi.size} selected</b><span class="grow"></span><button class="btn small" id="multiProfile">Profile them</button><button class="btn small" id="multiClear">Clear</button></div>`);
+    $("multiClear").onclick = () => { st.multi.clear(); renderLibrary(); renderBot(); };
+    $("multiProfile").onclick = () => { if (st.sub !== "profiling") setSub("profiling", false); $("botCard").scrollIntoView({behavior: "smooth", block: "nearest"}); };
+  }
+  // click: open it (and load it in game); shift-click: select a range;
+  // ctrl/cmd-click: add or remove one. A selection of 2+ is a bot batch.
+  lib.querySelectorAll(".lib-item").forEach(b => b.onclick = e => {
+    const id = b.dataset.id;
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      if (!st.multi.size && st.sel) st.multi.add(st.sel);
+      if (e.shiftKey && st.multiAnchor) {
+        const order = [...lib.querySelectorAll(".lib-item")].filter(x => x.offsetParent !== null).map(x => x.dataset.id);
+        let a = order.indexOf(st.multiAnchor), z = order.indexOf(id);
+        if (a < 0) a = z;
+        if (!(e.ctrlKey || e.metaKey)) st.multi.clear();
+        for (let i = Math.min(a, z); i <= Math.max(a, z); i++) st.multi.add(order[i]);
+      } else {
+        if (st.multi.has(id)) st.multi.delete(id); else st.multi.add(id);
+        st.multiAnchor = id;
+      }
+      try { window.getSelection().removeAllRanges(); } catch (er) {}
+      renderLibrary(); renderBot();
+      return;
+    }
+    st.multi.clear();
+    st.multiAnchor = id;
+    selectCombo(id, {load: true});
+    renderBot();
+  });
   lib.querySelectorAll("details.lib-sec").forEach(d => d.addEventListener("toggle", () => { libOpen[d.dataset.key] = d.open; }));
 }
 
@@ -1570,7 +1606,20 @@ function botFighterIds() {
   return combosFor(st.trainFighter).filter(c => (c.control || "classic") === "classic" && ($("botReset").checked || !(prof[c.id] && prof[c.id].p > 0.999)))
     .sort((a, b) => (!!a.experimental - !!b.experimental) || String(a.name).localeCompare(String(b.name))).map(c => c.id);
 }
+// the selected batch, in the sidebar's order
+function botBatchIds() {
+  if (st.multi.size < 2) return null;
+  const order = [...$("library").querySelectorAll(".lib-item")].map(x => x.dataset.id);
+  return order.filter(id => st.multi.has(id));
+}
 $("btnBotOne").onclick = async () => {
+  const batch = botBatchIds();
+  if (batch) {
+    const nexp = batch.filter(id => st.combos[id] && st.combos[id].experimental).length;
+    await sendCommand({cmd: "bot_start", ids: batch, options: {...botOptions(), experimental_limit: 30}});
+    $("botStatus").innerHTML = `<span class="muted">Sent ${batch.length} combos to the bot${nexp ? ` (${nexp} experimental: given up after 30 dry attempts)` : ""}.</span>`;
+    return;
+  }
   const c = st.sel && st.combos[st.sel]; if (!c) return;
   await sendCommand({cmd: "bot_start", ids: [c.id], options: botOptions()});
   $("botStatus").innerHTML = `<span class="muted">Sent. The bot starts as soon as the game is in Training mode.</span>`;
@@ -1617,6 +1666,8 @@ function fmtTime(sec) { sec = Math.max(0, Math.round(sec)); const m = Math.floor
 const PHASE = {A: "finding windows", B: "sweet-spot pass", C: "checking the full combo"};
 function renderBot() {
   renderSpeed();
+  const nb = st.multi.size > 1 ? st.multi.size : 0;
+  $("btnBotOne").textContent = nb ? `Profile ${nb} selected combos` : "Profile this combo";
   const b = st.status && st.status.bot;
   const box = $("botStatus");
   $("btnBotStop").disabled = !(b && b.running);

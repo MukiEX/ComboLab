@@ -132,6 +132,8 @@ The bot plays combos for you in Training mode and sweeps each step's press timin
 2. Sweet-spot pass: plays the full combo varying one step across its window, so the profile learns which part keeps the next step alive.
 3. Checks the full combo at the final target timings and reports how many were clean.
 
+**A batch:** shift-click (a range) or Ctrl-click (one at a time) combos in the sidebar, then **Profile N selected combos**. A plain click goes back to a single combo.
+
 **Profile all combos for this character** skips combos that are already at 100% (unless **Replace existing profile** is ticked) and runs experimental combos last. It gives up on an experimental combo after 30 attempts in a row with nothing working, so a combo that doesn't actually work can't eat the whole run.
 
 **Re-running a combo** keeps its profile and starts from what's already there: for each step with a measured window, the bot first checks that window's edges (about four attempts), and only searches if they no longer hold. Tick **Replace existing profile** to start from scratch instead. Steps with no measured window start from the frame-data prediction.
