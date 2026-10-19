@@ -28,6 +28,19 @@ Run `reframework/data/ComboLab/run_server.bat` (or `python combolab_server.py`, 
 - `--host 127.0.0.1` keeps it to this PC only. `--port` changes the port.
 - Windows Firewall will ask the first time; allow it on private networks.
 
+## Updating
+
+The **Hub Sync** tab has an **Updates** card: **Check for updates**, then **Update now**. It replaces only program files: the mod's Lua, this page and the server scripts. Combos, profiles, sessions, config and hub settings are never touched, and the old files are kept in `reframework/data/ComboLab/.update/backup/`.
+
+- **From the hub** (default): the hub hands out the files it was built from, so after you rebuild the hub from the repo every PC can update from it. Nothing else to install.
+- **From a git repo:** pick "A git repo" and enter its address (and a branch if it isn't the default). Needs git on the PC; a private repo needs its login set up in git (Git Credential Manager or an SSH key).
+- If the server scripts changed, the server restarts by itself in a new window and the page reloads. If the mod changed, reset scripts in game: REFramework menu (Insert) → ScriptRunner → **Reset scripts**.
+- A `.bat` file can't be replaced while it's running, so a changed one is saved next to it as `.new`; swap it in with the server closed.
+- Updates can only be started from the gaming PC itself (`http://localhost:8765`), or from any device when the server runs with `--token`, since they install code.
+- Without the page: `run_update.bat` (or `python combolab_update.py check | apply | source hub | source git <url> [branch]`).
+
+The first time, copy 1.14's files over by hand (or with a bundle); from then on the updater handles it.
+
 ## Sync profiles between machines (hub)
 
 The hub is a small server for your own domain that merges every machine's timing samples into one profile per combo, and keeps combos in step. Run it behind your HTTPS reverse proxy; each gaming PC syncs to it with its own token.

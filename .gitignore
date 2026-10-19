@@ -9,3 +9,5 @@ __pycache__/
 *.pyc
 reframework/data/ComboLab/shared/
 reframework/data/ComboLab/sync.json
+reframework/data/ComboLab/.update/
+reframework/data/ComboLab/update.json

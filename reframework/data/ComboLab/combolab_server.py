@@ -11,6 +11,7 @@ same files, so the page and the overlay talk exactly as they do locally.
 import argparse
 import json
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -122,6 +123,80 @@ def hub_action(body):
 ALLOWED_DIRS = ("", "combos", "profiles", "sessions", "shared", "bot")
 
 
+# ---------------------------------------------------------------- updates
+SERVER = None
+
+
+def update_allowed(handler):
+    """Updates run code on this PC, so only this PC (or a page that knows the
+    server's --token) may start one or change where they come from."""
+    host = handler.client_address[0]
+    return host in ("127.0.0.1", "::1", "::ffff:127.0.0.1") or bool(TOKEN)
+
+
+def update_info():
+    import combolab_update as U
+    s = U.load_settings(ROOT)
+    here = U.build_manifest(U.game_root(ROOT))
+    try:
+        import combolab_sync
+        with open(combolab_sync.config_path(ROOT), encoding="utf-8") as f:
+            hub = json.load(f).get("hub")
+    except (OSError, ValueError, ImportError):
+        hub = None
+    return {"settings": {k: s.get(k) for k in ("source", "git_url", "git_branch")}, "last_check": s.get("last_check"),
+            "last_update": s.get("last_update"), "local_version": here["version"], "hub": hub,
+            "git": bool(__import__("shutil").which("git"))}
+
+
+def restart_soon():
+    """Starts a fresh server process (new code) and ends this one."""
+    import subprocess
+    import threading
+
+    def go():
+        import time
+        time.sleep(1.0)
+        SYNC.stop()
+        if SERVER:
+            SERVER.server_close()
+        args = [sys.executable, os.path.abspath(__file__)] + sys.argv[1:]
+        kw = {"cwd": ROOT}
+        if os.name == "nt":
+            kw["creationflags"] = getattr(subprocess, "CREATE_NEW_CONSOLE", 0x10)
+        subprocess.Popen(args, **kw)
+        os._exit(0)
+    threading.Thread(target=go, daemon=True).start()
+
+
+def update_action(handler, body):
+    import combolab_update as U
+    act = body.get("action")
+    if not update_allowed(handler):
+        return 403, {"error": "updates can only be started from this PC (open http://localhost:%d there), or start the server with --token" % handler.server.server_address[1]}
+    try:
+        if act == "settings":
+            src = body.get("source")
+            if src not in ("hub", "git"):
+                return 400, {"error": "source must be hub or git"}
+            url = str(body.get("git_url") or "").strip()
+            if src == "git" and not re.match(r"^(https://|ssh://|git@|file://|[A-Za-z]:\\|/)", url):
+                return 400, {"error": "that doesn't look like a git address"}
+            U.save_settings(ROOT, {"source": src, "git_url": url, "git_branch": str(body.get("git_branch") or "").strip()})
+            return 200, update_info()
+        if act == "check":
+            res, _, _ = U.check(ROOT)
+            return 200, res
+        if act == "apply":
+            res = U.apply(ROOT)
+            if res.get("restart"):
+                restart_soon()
+            return 200, res
+    except U.UpdateError as e:
+        return 409, {"error": str(e)}
+    return 400, {"error": "unknown action"}
+
+
 def safe_path(rel):
     """Map a page path like 'combos/x.json' into ROOT, refusing anything else."""
     rel = (rel or "").replace("\\", "/").strip("/")
@@ -182,6 +257,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"name": "ComboLab", "root": os.path.basename(ROOT), "token": bool(TOKEN), "hub_ui": True})
         if path == "/api/hub":
             return self._json(200, hub_info())
+        if path == "/api/update":
+            info = update_info()
+            info["allowed"] = update_allowed(self)
+            return self._json(200, info)
         if path == "/api/list":
             d = safe_path(q.get("dir", ""))
             if d is None:
@@ -236,7 +315,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path, q = self._query()
-        if path != "/api/hub":
+        if path not in ("/api/hub", "/api/update"):
             return self._send(404, b"", "text/plain")
         if not self._authed():
             return self._json(401, {"error": "token required"})
@@ -245,7 +324,8 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(min(n, 65536)).decode("utf-8") or "{}")
         except ValueError:
             return self._json(400, {"error": "not json"})
-        code, out = hub_action(body if isinstance(body, dict) else {})
+        body = body if isinstance(body, dict) else {}
+        code, out = update_action(self, body) if path == "/api/update" else hub_action(body)
         return self._json(code, out)
 
     def do_DELETE(self):
@@ -290,7 +370,18 @@ def main():
     TOKEN = a.token
     for d in ("combos", "profiles", "sessions"):
         os.makedirs(os.path.join(ROOT, d), exist_ok=True)
-    srv = ThreadingHTTPServer((a.host, a.port), Handler)
+    global SERVER
+    srv = None
+    for attempt in range(40):          # after an update the old server may still be letting go of the port
+        try:
+            srv = ThreadingHTTPServer((a.host, a.port), Handler)
+            break
+        except OSError:
+            if attempt == 39:
+                raise
+            import time
+            time.sleep(0.5)
+    SERVER = srv
     print("ComboLab server serving %s" % ROOT)
     print("  this PC:      http://localhost:%d" % a.port)
     if a.host in ("0.0.0.0", ""):

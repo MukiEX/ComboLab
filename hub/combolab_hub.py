@@ -35,14 +35,24 @@ for p in (HERE, os.path.join(HERE, "..", "reframework", "data", "ComboLab")):
         sys.path.insert(0, p)
         break
 import combolab_merge  # noqa: E402
+import combolab_update  # noqa: E402
 sys.path.insert(0, HERE)
 import hub_auth  # noqa: E402
 
-HUB_VERSION = "1.12.0"
+HUB_VERSION = "1.14.0"
 MAX_BODY = 16 * 1024 * 1024
 BACKUP_KINDS = ("sessions", "bot")
 EXPORT_NAMESPACE = "combolab-export"
 NONCE_TTL = 120
+
+
+# Program files the hub hands out to PCs updating themselves: the copy it was
+# built from (Docker: /app/client), or the repo it runs from.
+def client_dir():
+    for d in (os.environ.get("COMBOLAB_CLIENT_DIR"), os.path.join(HERE, "client"), os.path.join(HERE, "..")):
+        if d and os.path.isfile(os.path.join(d, "reframework", "autorun", "ComboLab.lua")):
+            return os.path.abspath(d)
+    return None
 SESSION_COOKIE = "combolab_admin"
 SESSION_TTL = 12 * 3600
 MAX_PENDING_KEYS = 50
@@ -471,6 +481,22 @@ class Handler(BaseHTTPRequestHandler):
         # public
         if p == ["overview"]:
             return self._json(200, overview())
+        if p[:1] == ["client"]:
+            root = client_dir()
+            if not root:
+                return self._json(404, {"error": "this hub has no client files to hand out"})
+            if p == ["client", "manifest"]:
+                return self._json(200, combolab_update.build_manifest(root))
+            if p == ["client", "file"]:
+                rel = q.get("path", "")
+                if not combolab_update.is_client_path(rel):
+                    return self._json(404, {"error": "not a client file"})
+                full = os.path.join(root, *rel.split("/"))
+                if not os.path.isfile(full):
+                    return self._json(404, {"error": "missing"})
+                with open(full, "rb") as f:
+                    return self._send(200, f.read(), "application/octet-stream")
+            return self._json(404, {"error": "not found"})
         if p == ["challenge"]:
             return self._json(200, {"nonce": NONCES.new(), "ttl": NONCE_TTL, "namespace": EXPORT_NAMESPACE})
         # admin

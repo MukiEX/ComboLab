@@ -172,6 +172,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
     <span class="pill" id="pillGame"><span class="dot"></span><span>Game: unknown</span></span>
     <span class="pill" id="pillActive"><span>Nothing loaded in game</span></span>
     <span class="pill" id="pillHub" hidden></span>
+    <span class="pill" id="pillUpd" hidden style="cursor:pointer"><span class="dot warn"></span><span>Update available</span></span>
   </div>
 </header>
 
@@ -377,6 +378,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
   </section>
   <section class="card" id="hubCard"></section>
   <section class="card" id="hubConnect"></section>
+  <section class="card" id="updCard"></section>
 </main>
 <div class="tip" id="tip"></div>
 
@@ -505,7 +507,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.13.1";
+const PAGE_VERSION = "1.14.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -717,6 +719,12 @@ if (SERVER) {
     async read(path) {
       if (!this.ok) return null;
       try { const r = await api("/api/file?path=" + encodeURIComponent(path)); return r.ok ? await r.json() : null; } catch (e) { return null; }
+    },
+    async update(body) {
+      const r = await api("/api/update", body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {});
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || (r.status === 404 ? "this server is older than 1.14: update it by hand once" : "server error " + r.status));
+      return d;
     },
     async hub(body) {
       const r = await api("/api/hub", body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {});
@@ -1191,7 +1199,7 @@ function showPage(page) {
   document.querySelectorAll(".pagenav button").forEach(x => x.classList.toggle("on", x.dataset.page === page));
   $("mainTraining").hidden = page !== "training"; $("mainDb").hidden = page !== "db"; $("mainHub").hidden = page !== "hub";
   clearInterval(hubTimer);
-  if (page === "hub") { renderFolder(); renderHubPage(); hubTimer = setInterval(() => { if (!document.hidden) renderHubPage(true); }, 5000); }
+  if (page === "hub") { renderFolder(); renderHubPage(); renderUpdates({auto: true}); hubTimer = setInterval(() => { if (!document.hidden) renderHubPage(true); }, 5000); }
   if (page === "db") { if (!st.dbFighter) st.dbFighter = st.trainFighter; renderDb(); refreshProfiles(); }
   if (page === "training") { renderLibrary(); renderComboHead(); renderPanes(); }
 }
@@ -1751,11 +1759,106 @@ function renderHubConnect(h) {
   $("hcTokenBtn").onclick = () => go({action: "token", hub: $("hcHub").value.trim(), token: $("hcToken").value.trim()});
 }
 
+
+// ---------------------------------------------------------------- Updates (Hub Sync tab)
+let updBusy = false, updLast = null;
+function updSummary(r) {
+  if (!r) return "";
+  if (r.up_to_date) return `<span style="color:var(--good)">Up to date</span> <span class="muted">(${esc(r.remote_version || "?")}${r.commit ? " @" + esc(r.commit) : ""}, checked ${agoS(r.time)})</span>`;
+  const n = (r.changed || []).length + (r.added || []).length;
+  return `<b style="color:var(--warning)">${r.remote_version && r.remote_version !== r.local_version ? esc(r.remote_version) + " is available" : "Changed files available"}</b> <span class="muted">(${n} file${n === 1 ? "" : "s"}${r.commit ? ", @" + esc(r.commit) : ""}, checked ${agoS(r.time)})</span>`;
+}
+async function renderUpdates(opts = {}) {
+  const card = $("updCard");
+  if (!FS.server) { card.innerHTML = `<h2>Updates</h2><p class="muted" style="margin:0">Updating works through the ComboLab server (run_server.bat).</p>`; return; }
+  if (card.contains(document.activeElement) && !opts.force) return;
+  let u;
+  try { u = await FS.update(); } catch (e) { card.innerHTML = `<h2>Updates</h2><p class="muted" style="margin:0">${esc(e.message)}</p>`; return; }
+  const s = u.settings || {}, lc = updLast || u.last_check;
+  renderUpdPill(lc);
+  const files = lc && !lc.up_to_date ? [...(lc.changed || []).map(f => ["changed", f]), ...(lc.added || []).map(f => ["new", f])] : [];
+  card.innerHTML = `<h2>Updates</h2>
+    <div class="hubstate"><span class="big">This PC: ${esc(u.local_version || "?")}</span>${lc ? `<span>${updSummary(lc)}</span>` : ""}</div>
+    ${u.allowed ? "" : `<div class="notice" style="margin-top:10px">Updates can only be started on the gaming PC itself (open <b>http://localhost:8765</b> there), or when the server runs with <span style="font-family:var(--mono)">--token</span>.</div>`}
+    <div class="row" style="margin-top:12px;align-items:flex-end;gap:14px">
+      <label class="f">Get updates from <select id="updSource" ${u.allowed ? "" : "disabled"}><option value="hub">The hub${u.hub ? " (" + esc(String(u.hub).replace(/^https?:\/\//, "")) + ")" : " (not connected)"}</option><option value="git">A git repo</option></select></label>
+      <label class="f grow" id="updGitBox">Repo address <input type="text" id="updGitUrl" placeholder="https://github.com/you/ComboLab.git" value="${esc(s.git_url || "")}" ${u.allowed ? "" : "disabled"}></label>
+      <label class="f" id="updBranchBox">Branch <input type="text" id="updGitBranch" placeholder="default" style="width:120px" value="${esc(s.git_branch || "")}" ${u.allowed ? "" : "disabled"}></label>
+    </div>
+    <div id="updGitNote" class="muted" style="font-size:12px;margin-top:6px">${u.git ? "Uses this PC's git: a private repo needs its login set up in git (credential manager or an SSH key)." : `<span style="color:var(--warning)">git isn't installed on this PC</span>: install it from git-scm.com, or update from the hub.`}</div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="updCheck" ${u.allowed ? "" : "disabled"}>Check for updates</button>
+      <button class="btn primary" id="updApply" ${u.allowed && files.length ? "" : "disabled"}>Update now</button>
+      <span class="grow"></span>
+      ${u.last_update ? `<span class="muted" style="font-size:12px">Last update: ${esc(u.last_update.from || "?")} → ${esc(u.last_update.to || "?")}, ${agoS(u.last_update.time)}</span>` : ""}
+    </div>
+    ${files.length ? `<div style="margin-top:10px;font:12px/1.6 var(--mono)" class="ink2">${files.map(([k, f]) => `<div><span class="muted">${k}</span> ${esc(f)}</div>`).join("")}</div>` : ""}
+    ${lc && (lc.waiting || []).length ? `<div class="muted" style="font-size:12px;margin-top:8px">Waiting to be swapped in by hand (a running .bat can't be replaced): ${lc.waiting.map(f => `<span style="font-family:var(--mono)">${esc(f.split("/").pop())}.new</span>`).join(", ")}. Close the server window, delete the old file and rename the .new one.</div>` : ""}
+    <div id="updMsg" style="font-size:13px;margin-top:10px"></div>
+    <div class="muted" style="font-size:12px;margin-top:8px">Only program files change (the mod's Lua, this page and the server scripts); combos, profiles, sessions and settings are never touched. The old files are kept in <span style="font-family:var(--mono)">.update/backup</span>.</div>`;
+  $("updSource").value = s.source === "git" ? "git" : "hub";
+  const showGit = () => { const g = $("updSource").value === "git"; $("updGitBox").hidden = !g; $("updBranchBox").hidden = !g; $("updGitNote").hidden = !g; };
+  showGit();
+  const msg = (t, bad) => { $("updMsg").innerHTML = t; $("updMsg").style.color = bad ? "var(--critical)" : ""; };
+  const saveSrc = async () => {
+    try { await FS.update({action: "settings", source: $("updSource").value, git_url: $("updGitUrl").value.trim(), git_branch: $("updGitBranch").value.trim()}); updLast = null; return true; }
+    catch (e) { msg(esc(e.message), true); return false; }
+  };
+  $("updSource").onchange = async () => { showGit(); if ($("updSource").value === "hub") await saveSrc(); };
+  $("updCheck").onclick = async () => {
+    if (updBusy || !(await saveSrc())) return;
+    updBusy = true; msg("Checking…");
+    try { updLast = await FS.update({action: "check"}); await renderUpdates({force: true}); }
+    catch (e) { msg(esc(e.message), true); }
+    finally { updBusy = false; }
+  };
+  $("updApply").onclick = async () => {
+    if (updBusy) return;
+    if (!confirm("Update ComboLab's program files on this PC now?")) return;
+    updBusy = true; msg("Updating…");
+    let r;
+    try { r = await FS.update({action: "apply"}); }
+    catch (e) { updBusy = false; msg(esc(e.message), true); return; }
+    updLast = null;
+    const lines = [`<b style="color:var(--good)">Updated to ${esc(r.remote_version || "the latest")}</b>: ${r.written.length} file${r.written.length === 1 ? "" : "s"}.`];
+    if (r.mod_changed) lines.push(`<b>In game:</b> open the REFramework menu (Insert) → ScriptRunner → <b>Reset scripts</b> to load the new mod (or restart the game).`);
+    (r.side_by_side || []).forEach(f => lines.push(`<span class="muted">${esc(f.split("/").pop())} changed: the new one was saved next to it as ${esc(f.split("/").pop())}.new (a running .bat can't be replaced). Swap it in when the server isn't running.</span>`));
+    if (r.restart) lines.push(`Restarting the server with the new code…`);
+    msg(lines.join("<br>"));
+    if (r.restart || r.page_changed) {
+      // wait for the (new) server, then reload so the page is the new one too
+      await new Promise(res => setTimeout(res, r.restart ? 2500 : 300));
+      for (let i = 0; i < 40; i++) {
+        try { const x = await fetch("/api/info", {cache: "no-store", headers: {"X-ComboLab-Token": (() => { try { return localStorage.getItem("combolab_token") || ""; } catch (e) { return ""; } })()}}); if (x.ok) break; } catch (e) {}
+        await new Promise(res => setTimeout(res, 500));
+      }
+      try { sessionStorage.setItem("combolab_after_update", lines.join("<br>")); } catch (e) {}
+      location.reload();
+      return;
+    }
+    updBusy = false;
+    renderUpdates({force: true}).then(() => msg(lines.join("<br>")));
+  };
+  // check by itself when the last check is old
+  if (opts.auto && u.allowed && !updBusy && (!lc || Date.now() / 1000 - (lc.time || 0) > 1800)) $("updCheck").click();
+}
+function renderUpdPill(lc) {
+  const p = $("pillUpd");
+  p.hidden = !(lc && !lc.up_to_date && lc.remote_version);
+  if (!p.hidden) p.title = `${lc.remote_version} is available from ${lc.source}`;
+}
+$("pillUpd").onclick = () => showPage("hub");
+
 (async () => {
   if (FS.supported) {
     const r = await FS.restore(false);
     renderFolder();
     if (r === "ok") await afterConnect();
+    if (FS.server && FS.ok) {
+      FS.update().then(u => renderUpdPill(u.last_check)).catch(() => {});
+      let after = null; try { after = sessionStorage.getItem("combolab_after_update"); sessionStorage.removeItem("combolab_after_update"); } catch (e) {}
+      if (after) { showPage("hub"); setTimeout(() => { const m = $("updMsg"); if (m) m.innerHTML = after.replace("Restarting the server with the new code…", "The server restarted with the new code."); }, 1500); }
+    }
   }
   setInterval(() => pollData(false), 1000);
   setInterval(() => { if (!document.hidden) refreshProfiles(); }, 4000);
