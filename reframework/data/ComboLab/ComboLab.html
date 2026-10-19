@@ -406,13 +406,13 @@ const TRIGGER_PRESETS = {
     ["Any punch",{type:"button",mask:ALL_P,mode:"any"}],["Any kick",{type:"button",mask:ALL_K,mode:"any"}],
     ["Any button",{type:"button",mask:ALL_P|ALL_K,mode:"any"}],
     ["MP+MK (DR / parry)",{type:"button",mask:CB.MP|CB.MK,mode:"all"}],["HP+HK (DI)",{type:"button",mask:CB.HP|CB.HK,mode:"all"}],
-    ["LP+LK (throw)",{type:"button",mask:CB.LP|CB.LK,mode:"all"}],["66 dash",{type:"dash",mask:0,mode:"all"}],["Jump (up)",{type:"jump",mask:0,mode:"all"}],
+    ["LP+LK (throw)",{type:"button",mask:CB.LP|CB.LK,mode:"all"}],["66 dash",{type:"dash",mask:0,mode:"all"}],["Raw DR (parry, 66)",{type:"rawdr",mask:CB.MP|CB.MK,mode:"all"}],["Jump (up)",{type:"jump",mask:0,mode:"all"}],
   ],
   modern: [
     ["L",{type:"button",mask:MB.L,mode:"all"}],["M",{type:"button",mask:MB.M,mode:"all"}],["H",{type:"button",mask:MB.H,mode:"all"}],
     ["SP",{type:"button",mask:MB.SP,mode:"all"}],["Assist",{type:"button",mask:MB.AS,mode:"all"}],["DI",{type:"button",mask:MB.DI,mode:"all"}],
     ["Parry / DR",{type:"button",mask:MB.DP,mode:"all"}],["Any attack",{type:"button",mask:MB.L|MB.M|MB.H|MB.SP,mode:"any"}],
-    ["66 dash",{type:"dash",mask:0,mode:"all"}],["Jump (up)",{type:"jump",mask:0,mode:"all"}],
+    ["66 dash",{type:"dash",mask:0,mode:"all"}],["Raw DR (parry, 66)",{type:"rawdr",mask:MB.DP,mode:"all"}],["Jump (up)",{type:"jump",mask:0,mode:"all"}],
   ],
 };
 
@@ -489,6 +489,12 @@ function parseCombo(text, control, overrides) {
   return parts.map((p, i) => {
     const st = parseToken(p.raw, control);
     st.sep = i === 0 ? "start" : p.sep;
+    // DR that starts the combo (or follows a link) is a raw Drive Rush from
+    // standing: Parry (MP+MK) and then 66. The rush starts on the second
+    // forward, so that is the press we time. DR after ">" is a cancel (MP+MK).
+    if (st.label === "DR" && st.sep !== ">" && st.sep !== "~" && !st.error) {
+      st.trigger = {type: "rawdr", mask: control === "modern" ? MB.DP : CB.MP | CB.MK, mode: "all"};
+    }
     const ov = overrides && overrides[i];
     if (ov) {
       if (ov.kind) st.kind = ov.kind;
@@ -509,6 +515,7 @@ function hashSteps(steps) {
 function triggerText(t, control) {
   if (!t) return "?";
   if (t.type === "dash") return "66";
+  if (t.type === "rawdr") return "parry, 66";
   if (t.type === "jump") return "up";
   const names = control === "modern" ? Object.entries(MB) : Object.entries(CB);
   const on = names.filter(([n, b]) => (t.mask & b) !== 0).map(([n]) => n);
@@ -517,7 +524,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.16.2";
+const PAGE_VERSION = "1.17.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1505,8 +1512,33 @@ async function loadLibrary() {
   const out = {};
   for (const n of names) { const r = await FS.read("combos/" + n); if (r && r.data && r.data.id) out[r.data.id] = r.data; }
   st.combos = out;
+  await migrateRawDR();
   renderLibrary();
   if (st.page === "db") renderDb();
+}
+
+// 1.17: a DR that starts a combo (or follows a link) is timed as a raw Drive
+// Rush (parry, then 66) instead of on the parry press. Re-save older combo
+// files once with the new steps; their profiles start over (the old timings
+// were measured from the parry).
+async function migrateRawDR() {
+  if (!FS.ok) return;
+  const done = [];
+  for (const c of Object.values(st.combos)) {
+    const steps = arr(c.steps);
+    const idx = steps.map((x, i) => i).filter(i => steps[i].label === "DR" && (steps[i].sep === "start" || steps[i].sep === ",")
+      && (!steps[i].trigger || steps[i].trigger.type !== "rawdr") && !(c.overrides && c.overrides[i] && c.overrides[i].trigger));
+    if (!idx.length) continue;
+    const parsed = parseCombo(c.notation || "", c.control || "classic", c.overrides || {});
+    if (parsed.length !== steps.length || parsed.some(x => x.error)) continue;
+    const ns = parsed.map(x => ({label: x.label, sep: x.sep, kind: x.kind, trigger: x.trigger}));
+    const nc = {...c, steps: ns, hash: hashSteps(ns), version: (c.version || 1) + 1, updated: new Date().toISOString(), migrated: "rawdr"};
+    try { await FS.write(`combos/${c.id}.json`, nc); st.combos[c.id] = nc; done.push(nc.name || c.id); } catch (e) {}
+  }
+  if (done.length) {
+    sendCommand({cmd: "rescan"});
+    note(`${done.length} combo${done.length === 1 ? "" : "s"} starting with DR now time the Drive Rush as parry → 66 (their profiles start over): ${done.slice(0, 4).join(", ")}${done.length > 4 ? "…" : ""}`);
+  }
 }
 
 // Marks an experimental combo verified (first clean run by the player or the bot).

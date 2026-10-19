@@ -9,7 +9,12 @@ const s = P.parseCombo("2LP > 2LP, 5LK > DR > 5LP, 5HP > DR > 5HK, 5MP~4HP > [2]
 eq(s.map(x => x.label), ["2LP","2LP","5LK","DR","5LP","5HP","DR","5HK","5MP","4HP","[2]8HK"], "labels");
 eq(s.map(x => x.sep), ["start",">",",",">",">",",",">",">",",","~",">"], "seps");
 eq(s.map(x => x.kind), ["hit","hit","hit","move","hit","hit","move","hit","hit","hit","hit"], "kinds");
-eq(s[3].trigger, {type:"button",mask:288,mode:"all"}, "DR trigger");
+eq(s[3].trigger, {type:"button",mask:288,mode:"all"}, "DR cancel trigger");
+const raw = P.parseCombo("DR > 5MP, 5HP", "classic");
+eq(raw[0].trigger, {type:"rawdr",mask:288,mode:"all"}, "DR at the start is a raw Drive Rush (parry, 66)");
+eq(P.parseCombo("2LP, DR > 5LP", "classic")[1].trigger.type, "rawdr", "DR after a link is raw too");
+eq(P.parseCombo("DR > 5MP", "modern")[0].trigger.mask, P.MB.DP, "modern raw DR uses the parry button");
+eq(P.triggerText(raw[0].trigger, "classic"), "parry, 66", "raw DR text");
 eq(s[10].trigger, {type:"button",mask:512,mode:"all"}, "charge HK");
 const t = P.parseCombo("cr.MK xx 236P, j.HP 5HP -> SA2, 66, 9, MP+MK, PPP, DI", "classic");
 eq(t.map(x => x.label), ["2MK","236P","j.HP","5HP","SA2","66","9","MPMK","PPP","DI"], "alt labels");

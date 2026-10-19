@@ -38,10 +38,18 @@ local function trig_match(trig, frames, i)
         return (held & m) == m and (pheld & m) ~= m
     elseif tt == "jump" then
         return is_up(f.dir) and not (pf and is_up(pf.dir))
-    elseif tt == "dash" then
+    elseif tt == "dash" or tt == "rawdr" then
         if not (is_fwd(f.dir) and not (pf and is_fwd(pf.dir))) then return false end
+        local tap = false
         for j = i - 1, math.max(2, i - 14), -1 do
-            if is_fwd(frames[j].dir) and not is_fwd(frames[j - 1].dir) then return true end
+            if is_fwd(frames[j].dir) and not is_fwd(frames[j - 1].dir) then tap = true break end
+        end
+        if not tap or tt == "dash" then return tap end
+        -- raw Drive Rush: Parry (MP+MK) pressed shortly before the 66
+        local m = trig.mask or 0
+        if m == 0 then return true end
+        for j = i, math.max(1, i - 30), -1 do
+            if ((frames[j].held or 0) & m) == m then return true end
         end
         return false
     end
@@ -164,7 +172,7 @@ function Tracker:try_start(s, frame)
     local learned = self:learned_id(1)
     local ok = false
     local trig1 = st1.trigger or {}
-    local movement_trig = trig1.type == "jump" or trig1.type == "dash"
+    local movement_trig = trig1.type == "jump" or trig1.type == "dash" or trig1.type == "rawdr"
     if learned then
         ok = (inst.act == learned)
     elseif not inst.neutral or movement_trig then
@@ -243,7 +251,7 @@ function Tracker:step_attempt(s, frame, new_inst)
         local prev_inst = att.st[c - 1].inst
         if inst ~= prev_inst and s.t > A then
             local trig = st.trigger or {}
-            local mv_trig = trig.type == "jump" or trig.type == "dash"
+            local mv_trig = trig.type == "jump" or trig.type == "dash" or trig.type == "rawdr"
             local is_tail = self:is_tail(c - 1, inst.act)
             if not inst.neutral or (mv_trig and (st.kind == "move")) then
                 if (st.kind or "hit") == "move" then

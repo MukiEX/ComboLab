@@ -168,6 +168,7 @@ Three tabs along the top:
 1. In **Combo Database**, pick a character, click **+ New combo** and type it, for example
    `2LP > 2LP, 5LK > DR > 5LP, 5HP > DR > 5HK, 5MP~4HP > [2]8HK`.
    - `>` means cancel, `,` means link, `~` means chain or target combo.
+   - `DR` after `>` is a Drive Rush cancel (timed on MP+MK). A `DR` that starts the combo or follows a `,` is a raw Drive Rush from standing (Parry, then 66), timed on the second forward, which is when the rush starts.
    - `cr.MK`, `j.HP`, `[2]8HK`, `236P`, `DR`, `DI`, `66`, `SA2` and Modern buttons (`L M H SP`) all work.
    - Click a step chip to change what counts as its trigger press, or whether it is a hit or a movement step.
    - `Section: name` groups it under that section in the lists.

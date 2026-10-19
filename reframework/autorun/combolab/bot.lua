@@ -55,8 +55,12 @@ function Bot.step_plan(st, k, prev_st, fighter_id, control)
     local function add(from, to, dir, btn) plan[#plan + 1] = { from = from, to = to, dir = dir, btn = btn or 0 } end
 
     if label == "DR" then
-        if k == 1 or (prev_st and prev_st.kind == "move") then
-            -- raw Drive Rush: Drive Parry, then 66
+        local tt = st.trigger and st.trigger.type
+        if tt == "rawdr" then
+            -- raw Drive Rush timed on the second forward: Parry, 6, 5, 6
+            add(-10, -5, 5, MPMK); add(-4, -3, 6, 0); add(-2, -1, 5, 0); add(0, 2, 6, 0)
+        elseif k == 1 or (prev_st and prev_st.kind == "move") then
+            -- older combo files (DR timed on the parry press): Drive Parry, then 66
             add(0, 5, 5, MPMK); add(6, 7, 6, 0); add(8, 9, 5, 0); add(10, 12, 6, 0)
         else
             add(0, 1, 5, MPMK)                     -- Drive Rush cancel
