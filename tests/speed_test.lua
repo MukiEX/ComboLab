@@ -69,5 +69,16 @@ check(Speed.apply("global", 3) and global_speed == 3, "applied 3x")
 Speed.restore()
 check(global_speed == 1.0 and not Speed.active, "restored")
 check(not Speed.apply("training:TrainingManager._tData.SpeedIndex", 2), "index setting refused")
+-- scan over a fake type database
+json = { dump_file = function(p, v) DUMP = v; return true end }
+local function T(name, fields, methods) return { get_full_name = function() return name end,
+    get_fields = function() return fields end, get_methods = function() return methods or {} end } end
+local types = { T("app.training.TrainingData", { mkfield("_GameSpeed", "app.SpeedType"), mkfield("Life", "System.Int32") }),
+    T("app.Sound", { mkfield("Speed", "System.Single") }),
+    T("nBattle.sBattleFlow", {}, { { get_name = function() return "setFrameSkip" end } }) }
+sdk.get_tdb = function() return { get_num_types = function() return #types end, get_type = function(_, i) return types[i + 1] end } end
+local ok, n = Speed.scan("x.json")
+check(ok and n == 2, "scan lists the two battle/training hits, not app.Sound")
+check(DUMP and #DUMP.live >= 3, "scan includes live values")
 print(fail == 0 and "speed ok" or (fail .. " failed"))
 os.exit(fail == 0 and 0 or 1)

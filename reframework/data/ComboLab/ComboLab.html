@@ -253,6 +253,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
         <div class="row" style="gap:14px;align-items:flex-end;margin-top:12px">
           <label class="f">Research speed <select id="botSpeed"><option value="1">1x (normal)</option><option value="1.5">1.5x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option></select></label>
           <button class="btn small" id="btnSpeedTest" style="margin-bottom:3px">Test speed settings</button>
+          <button class="btn small" id="btnSpeedScan" style="margin-bottom:3px" title="Lists every speed-related setting in the game into speed_scan.json (the game freezes a few seconds)">Scan game</button>
           <span id="speedStatus" class="ink2" style="font-size:12.5px;margin-bottom:6px"></span>
         </div>
         <div class="row" style="margin-top:14px">
@@ -512,7 +513,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.15.0";
+const PAGE_VERSION = "1.15.1";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1585,6 +1586,7 @@ $("btnBotAll").onclick = async () => {
 };
 $("btnBotStop").onclick = () => sendCommand({cmd: "bot_stop"});
 $("btnSpeedTest").onclick = () => { sendCommand({cmd: "speed_test", mult: 2}); $("speedStatus").textContent = "Testing in game: about 15 seconds, hands off…"; };
+$("btnSpeedScan").onclick = () => { sendCommand({cmd: "speed_scan"}); $("speedStatus").textContent = "Scanning in game (it freezes a few seconds)… the list goes to speed_scan.json"; };
 $("botSpeed").onchange = () => sendCommand({cmd: "speed_settings", research_speed: +$("botSpeed").value});
 let speedSynced = false;
 function renderSpeed() {

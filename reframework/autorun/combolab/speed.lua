@@ -20,7 +20,8 @@ Speed.test = nil           -- running test state
 Speed.base_fps = nil
 Speed.error = nil
 
-local MAX_DEPTH, MAX_FIELDS = 3, 400
+local MAX_DEPTH, MAX_FIELDS = 4, 4000
+Speed.log = function(_) end      -- set by ComboLab.lua (REFramework log)
 
 local function safe(f, ...)
     local ok, a = pcall(f, ...)
@@ -119,6 +120,8 @@ function Speed.discover()
         end
     end
     Speed.candidates = list
+    Speed.log(string.format("found %d speed setting(s)", #list))
+    for _, c in ipairs(list) do Speed.log(string.format("  %s = %s (%s)", c.label, tostring(c.base), c.kind)) end
     return list
 end
 
@@ -139,6 +142,7 @@ function Speed.apply(key, mult)
             local orig = c.get()
             local ok = c.set(v)
             if not ok then return false, "couldn't set " .. c.label end
+            Speed.log(string.format("set %s to %s (reads back %s)", c.key, tostring(v), tostring(c.get())))
             Speed.active = { key = key, mult = mult, orig = orig, c = c }
             return true
         end
@@ -203,6 +207,7 @@ function Speed.update()
         local fps = (T.get_tick() - T.k0) / (now - T.t0)
         local item = T.item
         Speed.restore()
+        Speed.log(string.format("%s: %.1f frames/s", item.key or "normal speed", fps))
         if not item.key then
             Speed.base_fps = fps
             if fps < 20 then
@@ -222,6 +227,62 @@ function Speed.update()
     elseif T.phase == "gap" and now - T.t0 >= 0.3 then
         T.phase = "next"
     end
+end
+
+-- ---------------------------------------------------------------- scan
+-- Lists every type in the game whose fields or methods mention speed, under
+-- battle / training / game-flow types, into ComboLab/speed_scan.json, so the
+-- right setting can be found by hand when the test finds nothing. Takes a
+-- few seconds (the game freezes meanwhile).
+local TYPE_PAT = { "training", "battle", "gbattle", "gamespeed", "flow", "replay", "rollback", "sync", "network%.battle", "app%.application" }
+local NAME_PAT = { "speed", "slow", "timescale", "fastforward", "frameskip", "skipframe", "catchup", "catch_up", "stepcount", "updatecount", "deltatime" }
+
+local function matches(s, pats)
+    s = s:lower()
+    for _, p in ipairs(pats) do if s:find(p) then return true end end
+    return false
+end
+
+function Speed.scan(path)
+    local tdb = safe(sdk.get_tdb)
+    if not tdb then return false, "sdk.get_tdb isn't available" end
+    local n = safe(tdb.get_num_types, tdb) or 0
+    local out, types = {}, 0
+    for i = 0, n - 1 do
+        local t = safe(tdb.get_type, tdb, i)
+        local name = t and safe(t.get_full_name, t)
+        if name and (matches(name, TYPE_PAT) or matches(name, NAME_PAT)) then
+            local hits = {}
+            for _, f in ipairs(safe(t.get_fields, t) or {}) do
+                local fn = safe(f.get_name, f) or ""
+                if matches(fn, NAME_PAT) then
+                    local ft = safe(f.get_type, f)
+                    hits[#hits + 1] = "field " .. fn .. " : " .. (ft and safe(ft.get_full_name, ft) or "?") .. ((safe(f.is_static, f) and " (static)") or "")
+                end
+            end
+            for _, m in ipairs(safe(t.get_methods, t) or {}) do
+                local mn = safe(m.get_name, m) or ""
+                if matches(mn, NAME_PAT) then hits[#hits + 1] = "method " .. mn .. "()" end
+            end
+            if #hits > 0 or (matches(name, NAME_PAT) and name:lower():find("speed")) then
+                types = types + 1
+                out[#out + 1] = { type = name, hits = hits }
+            end
+        end
+    end
+    -- what the training manager actually holds right now
+    local live = {}
+    local tm = safe(sdk.get_managed_singleton, "app.training.TrainingManager")
+    if tm then
+        local found = {}
+        walk(tm, "TrainingManager", 0, found, {}, { n = MAX_FIELDS })
+        for _, c in ipairs(found) do live[#live + 1] = string.format("%s = %s (%s)", c.path, tostring(c.value), c.type) end
+    end
+    local app = global_candidate()
+    if app then live[#live + 1] = "via.Application.GlobalSpeed = " .. tostring(app.base) end
+    json.dump_file(path, { types_scanned = n, matches = out, live = live })
+    Speed.log(string.format("scan: %d of %d types mention speed; written to %s", types, n, path))
+    return true, types
 end
 
 -- ---------------------------------------------------------------- live rate

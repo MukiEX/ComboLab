@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.15.0"
+local VERSION = "1.15.1"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -485,6 +485,10 @@ local function handle_command(c)
             Speed.start_test(function() return Game.hook_ticks end, tonumber(c.mult) or 2)
             flash("Testing research speed: hands off for ~15 s")
         end
+    elseif cmd == "speed_scan" then
+        local ok, done, info = pcall(Speed.scan, DIR .. "speed_scan.json")
+        if ok and done then flash(string.format("Speed scan: %d types listed in reframework/data/ComboLab/speed_scan.json", info or 0))
+        else flash("Speed scan failed: " .. tostring(ok and info or done)) end
     elseif cmd == "speed_settings" then
         if tonumber(c.research_speed) then cfg.research_speed = math.max(1, math.min(8, tonumber(c.research_speed))) end
         if c.speed_key ~= nil then cfg.speed_key = (c.speed_key ~= "" and c.speed_key ~= false) and tostring(c.speed_key) or nil end
@@ -686,6 +690,7 @@ local function placement_tick()
     end
 end
 
+Speed.log = function(m) L("speed: %s", m) end
 if type(cfg.speed_results) == "table" then Speed.results = cfg.speed_results; Speed.base_fps = cfg.speed_base end
 local training_check = 0
 scan_combos()
@@ -890,6 +895,7 @@ re.on_draw_ui(function()
             imgui.text(string.format("  %s: %s", key, type(r) == "table" and (r.note or "") or "?"))
         end
         if st.error then imgui.text_colored(st.error, 0xFF5555FF) end
+        if imgui.button("Scan the game for speed settings (freezes a few seconds)") then handle_command({ cmd = "speed_scan" }) end
         local ch, v = imgui.slider_float("Research speed (x)", cfg.research_speed or 1, 1, 4)
         if ch then cfg.research_speed = math.floor(v * 4 + 0.5) / 4; save_cfg() end
         if st.fps then imgui.text(string.format("battle now: %.1f frames/s%s", st.fps, Speed.active and string.format("  (%.2gx on)", Speed.active.mult) or "")) end
