@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.13.0"
+local VERSION = "1.13.1"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -167,6 +167,7 @@ local function scan_combos()
 end
 
 local place = { idle = 0, done = false }    -- fighter placement state (see placement_tick)
+local facts_wanted = false                   -- read frame data for the loaded combo (see refresh_facts)
 
 local function profile_path(id) return DIR .. "profiles\\" .. id .. ".json" end
 local function session_path(id) return DIR .. "sessions\\" .. id .. ".json" end
@@ -265,7 +266,6 @@ local function summarize(f)
 end
 
 local facts_done = {}     -- "combo:k" -> true once read from the game this session
-local facts_wanted = false
 
 local function refresh_facts()
     local P = S.profile
@@ -570,13 +570,15 @@ local function merge_shared(id, rev)
         for _, e in ipairs(combos) do if e.id == id then entry = e end end
         if not entry then return nil end
     end
-    if not exists("shared", id .. ".json") then return true end
-    local sh = json.load_file(shared_path(id))
-    if type(sh) ~= "table" then return false end
     if loaded then
-        -- don't change the windows under a running attempt or the bot
+        -- don't change the windows under a running attempt or the bot (and
+        -- don't read the file yet: it can be big, and this runs every 5 s)
         if S.bot.running or S.tracker.att then return false end
         if S.profile.shared_rev == rev then return true end
+    end
+    local sh = json.load_file(shared_path(id))
+    if type(sh) ~= "table" then return not exists("shared", id .. ".json") end
+    if loaded then
         local n = S.profile:merge(sh)
         S.profile.shared_rev = rev
         save_profile()
@@ -597,7 +599,7 @@ local function merge_shared(id, rev)
 end
 
 local function sync_tick()
-    if not exists("shared", "_status.json") then return end
+    -- read straight away: a missing file just gives nil (fs.glob walks the whole data folder)
     local st = json.load_file(DIR .. "shared\\_status.json")
     if type(st) ~= "table" then return end
     if st.combos_rev ~= nil and st.combos_rev ~= sync.combos_rev then

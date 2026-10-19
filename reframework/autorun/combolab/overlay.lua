@@ -313,6 +313,32 @@ end
 --   idle: a dimmer looping demo plays the whole combo's cadence, chaining each
 --         step's optimal press + its usual press-to-startup delay.
 -- --------------------------------------------------------------------------
+-- --------------------------------------------------------------------------
+-- display clock: game frames as a smooth, fractional time for drawing.
+-- The game ticks on its own thread and its ticks don't line up with rendered
+-- frames, so "last tick + time since it" wobbles by most of a frame whenever
+-- the two drift past each other (a periodic hitch). This runs a clock at a
+-- steady 60/s from os.clock and only eases it toward the tick estimate; it
+-- snaps when the gap is big (pause, reset, new attempt counter).
+-- --------------------------------------------------------------------------
+local dclk = { t = nil, os = nil, frame = nil, value = nil }
+Overlay.frame_id = 0
+function Overlay.ftime(S, now)
+    if dclk.frame == Overlay.frame_id and dclk.value then return dclk.value end
+    local c = os.clock()
+    local est = now + math.max(0, math.min(1.5, (c - (S.tick_clock or c)) * 60))
+    local t
+    if not dclk.t or not dclk.os or c - dclk.os > 0.25 or math.abs(est - dclk.t) > 3 then
+        t = est
+    else
+        t = dclk.t + (c - dclk.os) * 60
+        t = t + (est - t) * 0.12
+        if t < dclk.t then t = dclk.t end          -- never run backwards
+    end
+    dclk.t, dclk.os, dclk.frame, dclk.value = t, c, Overlay.frame_id, t
+    return t
+end
+
 local demo_t0 = nil
 function Overlay.rhythm(S, geo, live, by, bh, sc)
     local P = S.profile
@@ -321,7 +347,7 @@ function Overlay.rhythm(S, geo, live, by, bh, sc)
         demo_t0 = nil
         local now = S.tracker:now()
         if not now then return end
-        local fnow = now + math.max(0, math.min(1, (os.clock() - (S.tick_clock or os.clock())) * 60))
+        local fnow = Overlay.ftime(S, now)
         local N = #S.combo.steps
         local T = S.song.T
         local BIG = 1.6
@@ -601,7 +627,7 @@ function Overlay.notes(S, W, H, sc, top)
     local labels = {}
     local live = S.tracker:live_detail()
     local now = S.tracker:now() or 0
-    local fnow = now + math.max(0, math.min(1, (os.clock() - (S.tick_clock or os.clock())) * 60))
+    local fnow = Overlay.ftime(S, now)
     local clock = os.clock()
 
     local T, first, A2 = Overlay.timeline(S, live, fnow)
@@ -782,7 +808,7 @@ function Overlay.fixation(S, W, H, sc, top)
     local labels = {}
     local live = S.tracker:live_detail()
     local now = S.tracker:now() or 0
-    local fnow = now + math.max(0, math.min(1, (os.clock() - (S.tick_clock or os.clock())) * 60))
+    local fnow = Overlay.ftime(S, now)
     local clock = os.clock()
     local T, first, A = Overlay.timeline(S, live, fnow)
 
@@ -943,6 +969,7 @@ end
 -- S = { mode, combo, profile, tracker, last, stats, cfg, msg }
 -- --------------------------------------------------------------------------
 function Overlay.draw(S)
+    Overlay.frame_id = Overlay.frame_id + 1
     local cfg = S.cfg
     local disp = imgui.get_display_size()
     local W, H = disp.x, disp.y
