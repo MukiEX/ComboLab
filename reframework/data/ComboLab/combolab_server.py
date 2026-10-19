@@ -111,6 +111,8 @@ def hub_action(body):
         try:
             SYNC.agent.rename(str(body.get("name") or "").strip())
         except combolab_sync.HubError as e:
+            if e.code == 404:
+                return 400, {"error": "this hub is older than 1.11 and can't rename machines yet; update the hub"}
             return 400, {"error": str(e.data.get("error") or e)}
         cfg = combolab_sync.read_json(combolab_sync.config_path(ROOT))
         combolab_sync.save_config(ROOT, cfg["hub"], cfg["token"], SYNC.agent.name, joined=True)
