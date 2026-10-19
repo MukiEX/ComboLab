@@ -15,6 +15,8 @@ proxy (nginx, Caddy, ...); it listens on localhost by default.
 Standard library only (Python 3.8+). Data lives in one SQLite file.
 """
 import argparse
+import base64
+import getpass
 import hashlib
 import hmac
 import json
@@ -33,10 +35,105 @@ for p in (HERE, os.path.join(HERE, "..", "reframework", "data", "ComboLab")):
         sys.path.insert(0, p)
         break
 import combolab_merge  # noqa: E402
+sys.path.insert(0, HERE)
+import hub_auth  # noqa: E402
 
-HUB_VERSION = "1.7.0"
+HUB_VERSION = "1.9.0"
 MAX_BODY = 16 * 1024 * 1024
 BACKUP_KINDS = ("sessions", "bot")
+EXPORT_NAMESPACE = "combolab-export"
+NONCE_TTL = 120
+SESSION_COOKIE = "combolab_admin"
+SESSION_TTL = 12 * 3600
+MAX_PENDING_KEYS = 50
+
+
+def export_message(nonce):
+    """What an exporting viewer signs (raw Ed25519, or via ssh-keygen -Y sign)."""
+    return ("combolab-export\n%s\n" % nonce).encode("utf-8")
+
+
+def clean_name(s):
+    s = " ".join(str(s or "").split())[:40]
+    return "".join(c for c in s if c.isprintable())
+
+
+class Expiring:
+    """Small in-memory token store (admin sessions, export challenges)."""
+
+    def __init__(self, ttl, cap):
+        self.ttl, self.cap, self.items, self.lock = ttl, cap, {}, threading.Lock()
+
+    def _purge(self, now):
+        for k in [k for k, t in self.items.items() if t < now]:
+            del self.items[k]
+
+    def new(self):
+        tok = secrets.token_urlsafe(24)
+        now = time.time()
+        with self.lock:
+            self._purge(now)
+            if len(self.items) >= self.cap:
+                del self.items[min(self.items, key=self.items.get)]
+            self.items[tok] = now + self.ttl
+        return tok
+
+    def valid(self, tok):
+        with self.lock:
+            return bool(tok) and self.items.get(tok, 0) > time.time()
+
+    def take(self, tok):
+        with self.lock:
+            ok = bool(tok) and self.items.get(tok, 0) > time.time()
+            self.items.pop(tok, None)
+            return ok
+
+    def drop(self, tok):
+        with self.lock:
+            self.items.pop(tok, None)
+
+    def clear(self):
+        with self.lock:
+            self.items.clear()
+
+
+class RateLimit:
+    def __init__(self, limit, window, block):
+        self.limit, self.window, self.block = limit, window, block
+        self.hits, self.lock = {}, threading.Lock()
+
+    def _recent(self, ip, now):
+        h = [t for t in self.hits.get(ip, []) if t > now - self.window]
+        self.hits[ip] = h
+        return h
+
+    def blocked(self, ip):
+        now = time.time()
+        with self.lock:
+            h = self._recent(ip, now)
+            if len(h) >= self.limit:
+                return int(h[-1] + self.block - now) if h[-1] + self.block > now else 0
+            return 0
+
+    def fail(self, ip):
+        with self.lock:
+            self.hits.setdefault(ip, []).append(time.time())
+
+    def clear(self, ip):
+        with self.lock:
+            self.hits.pop(ip, None)
+
+    def allow(self, ip):
+        if self.blocked(ip):
+            return False
+        self.fail(ip)
+        return True
+
+
+SESSIONS = Expiring(SESSION_TTL, 50)
+NONCES = Expiring(NONCE_TTL, 500)
+LOGIN_LIMIT = RateLimit(5, 900, 900)       # 5 wrong passwords in 15 min -> 15 min lockout
+REQUEST_LIMIT = RateLimit(5, 3600, 3600)   # 5 key requests per hour per address
 
 
 def canon(obj):
@@ -71,6 +168,8 @@ class Store:
                 origins TEXT, updated INTEGER, by TEXT, PRIMARY KEY (id, hash));
             CREATE TABLE IF NOT EXISTS backups (machine TEXT, kind TEXT, id TEXT, data TEXT, sha TEXT,
                 updated INTEGER, PRIMARY KEY (machine, kind, id));
+            CREATE TABLE IF NOT EXISTS viewer_keys (key TEXT PRIMARY KEY, name TEXT, added INTEGER, last_export INTEGER);
+            CREATE TABLE IF NOT EXISTS key_requests (key TEXT PRIMARY KEY, name TEXT, requested INTEGER, addr TEXT);
         """)
 
     def q(self, sql, args=()):
@@ -82,6 +181,49 @@ class Store:
         rev = int(row[0]) + 1 if row else 1
         self.db.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('rev', ?)", (str(rev),))
         return rev
+
+    # ---------------------------------------------------------------- settings
+    def meta(self, k):
+        row = self.q("SELECT v FROM meta WHERE k=?", (k,))
+        return row[0][0] if row else None
+
+    def set_meta(self, k, v):
+        self.q("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)", (k, v))
+
+    # ---------------------------------------------------------------- viewer keys
+    @staticmethod
+    def _k(raw):
+        return hub_auth.format_public_key(raw)
+
+    def key_name(self, raw):
+        row = self.q("SELECT name FROM viewer_keys WHERE key=?", (self._k(raw),))
+        return row[0][0] if row else None
+
+    def key_used(self, raw):
+        self.q("UPDATE viewer_keys SET last_export=? WHERE key=?", (int(time.time()), self._k(raw)))
+
+    def allow_key(self, raw, name):
+        self.q("INSERT OR REPLACE INTO viewer_keys (key, name, added) VALUES (?, ?, ?)", (self._k(raw), name, int(time.time())))
+        self.q("DELETE FROM key_requests WHERE key=?", (self._k(raw),))
+
+    def remove_key(self, raw):
+        self.q("DELETE FROM viewer_keys WHERE key=?", (self._k(raw),))
+
+    def request_key(self, raw, name, addr):
+        if self.q("SELECT 1 FROM key_requests WHERE key=?", (self._k(raw),)):
+            self.q("UPDATE key_requests SET name=?, requested=?, addr=? WHERE key=?", (name, int(time.time()), addr, self._k(raw)))
+            return True
+        if self.q("SELECT COUNT(*) FROM key_requests")[0][0] >= MAX_PENDING_KEYS:
+            return False
+        self.q("INSERT INTO key_requests (key, name, requested, addr) VALUES (?, ?, ?, ?)", (self._k(raw), name, int(time.time()), addr))
+        return True
+
+    def request_name(self, raw):
+        row = self.q("SELECT name FROM key_requests WHERE key=?", (self._k(raw),))
+        return row[0][0] if row else None
+
+    def drop_request(self, raw):
+        self.q("DELETE FROM key_requests WHERE key=?", (self._k(raw),))
 
     # ---------------------------------------------------------------- machines
     def add_machine(self, name):
@@ -160,20 +302,26 @@ class Handler(BaseHTTPRequestHandler):
         fwd = self.headers.get("X-Forwarded-For") if self.headers else None
         return (fwd.split(",")[0].strip() if fwd else self.client_address[0])
 
-    def _send(self, code, body=b"", ctype="application/json"):
+    def _send(self, code, body=b"", ctype="application/json", headers=None):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        for k, v in (headers or []):
+            self.send_header(k, v)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def _json(self, code, obj):
-        self._send(code, json.dumps(obj).encode("utf-8"))
+    def _json(self, code, obj, headers=None):
+        self._send(code, json.dumps(obj).encode("utf-8"), headers=headers)
 
-    def _auth(self):
+    # ---------------------------------------------------------------- who is asking
+    def _machine(self):
+        """Sync agents: per-machine bearer token."""
         a = self.headers.get("Authorization", "")
         tok = a[7:].strip() if a.lower().startswith("bearer ") else ""
         name = STORE.machine_for(tok)
@@ -182,9 +330,27 @@ class Handler(BaseHTTPRequestHandler):
             self._json(401, {"error": "unknown or missing token"})
             return None
         ua = self.headers.get("User-Agent", "")
-        if ua.startswith("ComboLab-sync/"):  # a browser viewing the overview isn't a sync
+        if ua.startswith("ComboLab-sync/"):  # only count real syncs as activity
             STORE.seen(name, ua, self.client_ip(), self.headers.get("X-ComboLab-Machine-Id"))
         return name
+
+    def _cookie(self, name):
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == name:
+                return v
+        return None
+
+    def _admin(self, write=False):
+        """Admin web page: session cookie from the password login. Writes also
+        need the X-ComboLab-Admin header, which other sites can't send."""
+        if write and self.headers.get("X-ComboLab-Admin") != "1":
+            self._json(403, {"error": "missing admin header"})
+            return False
+        if not SESSIONS.valid(self._cookie(SESSION_COOKIE)):
+            self._json(401, {"error": "sign in as admin"})
+            return False
+        return True
 
     def _body(self):
         n = int(self.headers.get("Content-Length", "0") or 0)
@@ -203,17 +369,29 @@ class Handler(BaseHTTPRequestHandler):
     # ---------------------------------------------------------------- GET
     def do_GET(self):
         parts, q = self._route()
-        if not parts or parts == ["index.html"]:
+        if not parts or parts in (["index.html"], ["admin"]):
             with open(os.path.join(HERE, "hub.html"), "rb") as f:
-                return self._send(200, f.read(), "text/html; charset=utf-8")
+                return self._send(200, f.read(), "text/html; charset=utf-8", headers=[
+                    ("Content-Security-Policy", "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'")])
         if parts == ["healthz"]:
             return self._json(200, {"ok": True, "version": HUB_VERSION})
         if parts[:2] != ["api", "v1"]:
             return self._json(404, {"error": "not found"})
-        me = self._auth()
+        p = parts[2:]
+        # public
+        if p == ["overview"]:
+            return self._json(200, overview())
+        if p == ["challenge"]:
+            return self._json(200, {"nonce": NONCES.new(), "ttl": NONCE_TTL, "namespace": EXPORT_NAMESPACE})
+        # admin
+        if p == ["admin", "state"]:
+            if not self._admin():
+                return
+            return self._json(200, admin_state())
+        # sync agents
+        me = self._machine()
         if not me:
             return
-        p = parts[2:]
         if p == ["index"]:
             combos = {cid: {"rev": rev, "sha": h} for cid, rev, h in STORE.q("SELECT id, rev, sha FROM combos")}
             profiles = {}
@@ -240,10 +418,6 @@ class Handler(BaseHTTPRequestHandler):
             if not row:
                 return self._json(404, {"error": "no such backup"})
             return self._json(200, {"data": json.loads(row[0][0]), "updated": row[0][1]})
-        if p == ["overview"]:
-            return self._json(200, overview(me))
-        if p == ["export"]:
-            return self._json(200, export_all())
         return self._json(404, {"error": "not found"})
 
     # ---------------------------------------------------------------- writes
@@ -257,14 +431,20 @@ class Handler(BaseHTTPRequestHandler):
         parts, q = self._route()
         if parts[:2] != ["api", "v1"]:
             return self._json(404, {"error": "not found"})
-        me = self._auth()
-        if not me:
-            return
         p = parts[2:]
         try:
             body = self._body()
         except (ValueError, UnicodeDecodeError) as e:
             return self._json(400, {"error": "bad body: %s" % e})
+        if verb == "POST" and p == ["export"]:
+            return self._export(body)
+        if verb == "POST" and p == ["key-requests"]:
+            return self._key_request(body)
+        if p[:1] == ["admin"] and verb == "POST":
+            return self._admin_post(p[1:], body)
+        me = self._machine()
+        if not me:
+            return
         if verb == "PUT" and len(p) == 2 and p[0] == "combos" and valid_id(p[1]):
             if not isinstance(body.get("steps"), list) or not body.get("steps"):
                 return self._json(400, {"error": "not a combo"})
@@ -277,8 +457,120 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True})
         return self._json(404, {"error": "not found"})
 
+    # ---------------------------------------------------------------- export (signed)
+    def _export(self, body):
+        """Export needs a signature over a fresh challenge from an approved key:
+        {pubkey, nonce, sig, format: "raw" (browser) | "sshsig" (ssh-keygen -Y sign)}."""
+        try:
+            raw = hub_auth.parse_public_key(body.get("pubkey", ""))
+        except ValueError as e:
+            return self._json(400, {"error": str(e)})
+        nonce = str(body.get("nonce") or "")
+        if not NONCES.take(nonce):
+            return self._json(400, {"error": "challenge expired or already used; try again"})
+        msg = export_message(nonce)
+        fmt = body.get("format", "raw")
+        try:
+            if fmt == "sshsig":
+                ok = hub_auth.verify_sshsig(str(body.get("sig") or ""), raw, msg, EXPORT_NAMESPACE)
+            else:
+                ok = hub_auth.ed25519_verify(raw, msg, base64.b64decode(str(body.get("sig") or ""), validate=True))
+        except (ValueError, TypeError):
+            ok = False
+        if not ok:
+            time.sleep(0.5)
+            return self._json(403, {"error": "signature doesn't check out"})
+        name = STORE.key_name(raw)
+        if not name:
+            return self._json(403, {"error": "this key isn't approved on the hub yet", "fingerprint": hub_auth.fingerprint(raw)})
+        STORE.key_used(raw)
+        return self._json(200, export_all())
 
-def overview(me):
+    def _key_request(self, body):
+        try:
+            raw = hub_auth.parse_public_key(body.get("pubkey", ""))
+        except ValueError as e:
+            return self._json(400, {"error": str(e)})
+        name = clean_name(body.get("name"))
+        if not name:
+            return self._json(400, {"error": "give your key a name (who or which device it is)"})
+        if STORE.key_name(raw):
+            return self._json(200, {"status": "approved", "fingerprint": hub_auth.fingerprint(raw)})
+        if not REQUEST_LIMIT.allow(self.client_ip()):
+            return self._json(429, {"error": "too many requests; try later"})
+        if not STORE.request_key(raw, name, self.client_ip()):
+            return self._json(429, {"error": "the hub has too many pending requests"})
+        return self._json(200, {"status": "pending", "fingerprint": hub_auth.fingerprint(raw)})
+
+    # ---------------------------------------------------------------- admin
+    def _admin_post(self, p, body):
+        if p == ["login"]:
+            ip = self.client_ip()
+            wait = LOGIN_LIMIT.blocked(ip)
+            if wait:
+                return self._json(429, {"error": "too many attempts; wait %d minutes" % max(1, wait // 60)})
+            stored = STORE.meta("admin_pw")
+            if not stored:
+                return self._json(409, {"error": "no admin password set; on the server run: combolab_hub.py set-admin-password"})
+            if not hub_auth.check_password(str(body.get("password") or ""), stored):
+                LOGIN_LIMIT.fail(ip)
+                time.sleep(1.0)
+                return self._json(401, {"error": "wrong password"})
+            LOGIN_LIMIT.clear(ip)
+            tok = SESSIONS.new()
+            secure = "; Secure" if self.headers.get("X-Forwarded-Proto", "") == "https" else ""
+            return self._json(200, {"ok": True}, headers=[("Set-Cookie", "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d%s"
+                                                            % (SESSION_COOKIE, tok, SESSION_TTL, secure))])
+        if p == ["logout"]:
+            SESSIONS.drop(self._cookie(SESSION_COOKIE))
+            return self._json(200, {"ok": True}, headers=[("Set-Cookie", "%s=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" % SESSION_COOKIE)])
+        if not self._admin(write=True):
+            return
+        action = body.get("action")
+        if p == ["keys"]:
+            try:
+                raw = hub_auth.parse_public_key(body.get("pubkey", ""))
+            except ValueError as e:
+                return self._json(400, {"error": str(e)})
+            if action in ("approve", "add"):
+                name = clean_name(body.get("name")) or STORE.request_name(raw)
+                if not name:
+                    return self._json(400, {"error": "name the key"})
+                STORE.allow_key(raw, name)
+            elif action == "remove":
+                STORE.remove_key(raw)
+            elif action == "reject":
+                STORE.drop_request(raw)
+            else:
+                return self._json(400, {"error": "unknown action"})
+            return self._json(200, admin_state())
+        if p == ["machines"]:
+            name = str(body.get("name") or "")
+            if not valid_id(name):
+                return self._json(400, {"error": "machine names use letters, digits, - _ ."})
+            if action == "add":
+                tok = STORE.add_machine(name)
+                st = admin_state()
+                st["new_token"] = {"name": name, "token": tok}
+                return self._json(200, st)
+            if action == "remove":
+                STORE.q("DELETE FROM machines WHERE name=?", (name,))
+                return self._json(200, admin_state())
+            return self._json(400, {"error": "unknown action"})
+        if p == ["password"]:
+            if not hub_auth.check_password(str(body.get("current") or ""), STORE.meta("admin_pw") or ""):
+                time.sleep(1.0)
+                return self._json(401, {"error": "current password is wrong"})
+            new = str(body.get("new") or "")
+            if len(new) < 10:
+                return self._json(400, {"error": "use at least 10 characters"})
+            STORE.set_meta("admin_pw", hub_auth.hash_password(new))
+            SESSIONS.clear()
+            return self._json(200, {"ok": True})
+        return self._json(404, {"error": "not found"})
+
+
+def overview():
     machines, names = [], {}
     for n, ls, ag, cr, mid in STORE.q("SELECT name, last_seen, agent, created, mod_id FROM machines ORDER BY name"):
         machines.append({"name": n, "last_seen": ls, "agent": ag, "created": cr})
@@ -298,8 +590,25 @@ def overview(me):
                               "updated": updated, "by": by, "current": h == e.get("hash")})
     backups = [{"machine": m, "kind": k, "count": n}
                for m, k, n in STORE.q("SELECT machine, kind, COUNT(*) FROM backups GROUP BY machine, kind")]
-    return {"me": me, "version": HUB_VERSION, "machines": machines,
+    return {"version": HUB_VERSION, "machines": machines,
             "combos": sorted(combos.values(), key=lambda c: (c["fighter"], c["name"])), "backups": backups}
+
+
+def admin_state():
+    def fp(k):
+        try:
+            return hub_auth.fingerprint(hub_auth.parse_public_key(k))
+        except ValueError:
+            return "?"
+    return {
+        "password_set": bool(STORE.meta("admin_pw")),
+        "keys": [{"key": k, "name": n, "fingerprint": fp(k), "added": a, "last_export": le}
+                 for k, n, a, le in STORE.q("SELECT key, name, added, last_export FROM viewer_keys ORDER BY name")],
+        "requests": [{"key": k, "name": n, "fingerprint": fp(k), "requested": r, "addr": ad}
+                     for k, n, r, ad in STORE.q("SELECT key, name, requested, addr FROM key_requests ORDER BY requested DESC")],
+        "machines": [{"name": n, "last_seen": ls, "agent": ag, "created": cr, "addr": ad}
+                     for n, ls, ag, cr, ad in STORE.q("SELECT name, last_seen, agent, created, addr FROM machines ORDER BY name")],
+    }
 
 
 def export_all():
@@ -315,8 +624,10 @@ def export_all():
 def main():
     global STORE
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["serve", "add-machine", "list-machines", "remove-machine", "export"])
-    ap.add_argument("name", nargs="?", help="machine name, or folder for export")
+    ap.add_argument("command", choices=["serve", "add-machine", "list-machines", "remove-machine", "export",
+                                        "set-admin-password", "allow-key", "list-keys", "remove-key"])
+    ap.add_argument("name", nargs="?", help="machine or key name, or folder for export")
+    ap.add_argument("key", nargs="?", help="allow-key / remove-key: the ssh-ed25519 public key")
     ap.add_argument("--data", default=os.environ.get("COMBOLAB_HUB_DATA", os.path.join(HERE, "data")),
                     help="data folder (default ./data or $COMBOLAB_HUB_DATA)")
     ap.add_argument("--host", default=os.environ.get("COMBOLAB_HUB_HOST", "127.0.0.1"))
@@ -329,6 +640,36 @@ def main():
         tok = STORE.add_machine(a.name)
         print("Machine '%s' added. Its token (shown once; adding the same name again replaces it):\n\n  %s\n" % (a.name, tok))
         print("On that PC, in reframework\\data\\ComboLab:\n  run_sync.bat setup https://YOUR-HUB %s" % tok)
+        return
+    if a.command == "set-admin-password":
+        pw = os.environ.get("COMBOLAB_HUB_ADMIN_PASSWORD")
+        if not pw:
+            pw = getpass.getpass("New admin password: ")
+            if pw != getpass.getpass("Again: "):
+                sys.exit("Passwords don't match.")
+        if len(pw) < 10:
+            sys.exit("Use at least 10 characters.")
+        STORE.set_meta("admin_pw", hub_auth.hash_password(pw))
+        print("Admin password set. Sign in at https://YOUR-HUB/admin")
+        return
+    if a.command in ("allow-key", "remove-key"):
+        try:
+            raw = hub_auth.parse_public_key(a.key or "")
+        except ValueError as e:
+            sys.exit("%s (quote the whole 'ssh-ed25519 AAAA...' line)" % e)
+        if a.command == "allow-key":
+            STORE.allow_key(raw, clean_name(a.name) or "key")
+            print("Allowed %s (%s) to export." % (a.name, hub_auth.fingerprint(raw)))
+        else:
+            STORE.remove_key(raw)
+            print("Removed %s." % hub_auth.fingerprint(raw))
+        return
+    if a.command == "list-keys":
+        st = admin_state()
+        for k in st["keys"]:
+            print("allowed  %-20s %s" % (k["name"], k["fingerprint"]))
+        for k in st["requests"]:
+            print("pending  %-20s %s  from %s" % (k["name"], k["fingerprint"], k["addr"]))
         return
     if a.command == "list-machines":
         for n, ls, ag in STORE.q("SELECT name, last_seen, agent FROM machines ORDER BY name"):
@@ -361,7 +702,9 @@ def main():
     print("ComboLab hub %s on http://%s:%d  (data: %s, %d machine%s)" % (
         HUB_VERSION, a.host, a.port, os.path.abspath(a.data), n, "" if n == 1 else "s"))
     if n == 0:
-        print("No machines yet: python combolab_hub.py add-machine <name>")
+        print("No machines yet: python combolab_hub.py add-machine <name> (or in the admin page)")
+    if not STORE.meta("admin_pw"):
+        print("No admin password yet: python combolab_hub.py set-admin-password")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

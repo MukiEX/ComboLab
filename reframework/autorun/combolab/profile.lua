@@ -17,6 +17,7 @@ Profile.CAL = nil             -- prediction calibration, set from config
 local MAX_SAMPLES = 300
 Profile.MAX_SAMPLES = MAX_SAMPLES
 Profile.MACHINE = "local"     -- set from config: tags samples recorded on this PC
+Profile.OPP = nil             -- the training dummy's fighter id, tagged on samples
 
 local function key(a) return tostring(a) end
 
@@ -372,6 +373,7 @@ function Profile:learn(res, mode)
                     spam = o.spam or 0, mode = mode, act = o.act,
                     a = self.seq, nx = nx, full = res.ok and 1 or 0,
                     t = os.time(), u = Profile.MACHINE .. "-" .. os.time() .. "-" .. self.seq,
+                    opp = Profile.OPP,
                 }
                 while #st.samples > MAX_SAMPLES do table.remove(st.samples, 1) end
             end

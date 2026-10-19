@@ -24,17 +24,25 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 var(--sans); }
 button, input { font: inherit; color: inherit; }
+a { color: var(--accent); }
 header { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--ring); flex-wrap: wrap; }
 header h1 { font-size: 17px; margin: 0; }
 header h1 span { color: var(--muted); font-weight: 400; }
+nav { display: flex; gap: 4px; }
+nav a { text-decoration: none; color: var(--ink-2); padding: 5px 10px; border-radius: 7px; }
+nav a.on { background: var(--surface-2); color: var(--ink); }
 .sp { flex: 1; }
 main { max-width: 1200px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 16px; }
 .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 16px; min-width: 0; }
 .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
 .btn { background: var(--surface-2); border: 1px solid var(--ring); border-radius: 7px; padding: 6px 12px; cursor: pointer; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-input[type=password] { background: var(--surface-2); border: 1px solid var(--ring); border-radius: 7px; padding: 7px 10px; width: min(460px, 100%); font-family: var(--mono); }
+.btn.danger { color: var(--critical); }
+.btn:disabled { opacity: .5; cursor: default; }
+input[type=text], input[type=password] { background: var(--surface-2); border: 1px solid var(--ring); border-radius: 7px; padding: 7px 10px; min-width: 0; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .muted { color: var(--muted); }
+.m { font-family: var(--mono); }
 .scroll { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--ring); vertical-align: top; }
@@ -48,37 +56,99 @@ td.n { font-variant-numeric: tabular-nums; text-align: right; }
 .stats { display: flex; gap: 28px; flex-wrap: wrap; }
 .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
 .stat span { font-size: 12px; color: var(--muted); }
-#err { color: var(--critical); }
+.msg { font-size: 13px; margin-top: 8px; }
+.msg.err { color: var(--critical); } .msg.ok { color: var(--good); }
+pre.box { background: var(--surface-2); border: 1px solid var(--ring); border-radius: 7px; padding: 8px 10px; white-space: pre-wrap; word-break: break-all; font: 12px/1.4 var(--mono); margin: 8px 0 0; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 800px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+[hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <header>
   <h1>ComboLab <span>Hub</span></h1>
+  <nav><a href="./" id="navView">Overview</a><a href="admin" id="navAdmin">Admin</a></nav>
   <span class="sp"></span>
   <span id="who" class="muted"></span>
-  <button class="btn" id="btnExport" hidden>Download everything (JSON)</button>
-  <button class="btn" id="btnLogout" hidden>Forget token</button>
+  <button class="btn" id="btnLogout" hidden>Sign out</button>
 </header>
 <main>
-  <section class="card" id="login" hidden>
-    <h2>Sign in</h2>
-    <p class="muted" style="margin-top:0">Paste one of your machine tokens (from <code>combolab_hub.py add-machine</code>). It's kept in this browser only.</p>
-    <form id="loginForm" style="display:flex;gap:8px;flex-wrap:wrap">
-      <input type="password" id="tok" placeholder="token" autocomplete="off">
-      <button class="btn primary">Open</button>
-    </form>
-    <p id="err"></p>
-  </section>
-  <div id="app" hidden>
+  <!-- ------------------------------------------------ public view -->
+  <div id="viewPage" hidden>
     <section class="card"><div class="stats" id="stats"></div></section>
+    <section class="card" style="margin-top:16px">
+      <h2>Export</h2>
+      <p class="muted" style="margin-top:0">Downloading everything needs a key the hub's admin has approved. This browser makes its own key (the private half never leaves it).</p>
+      <div id="expUnsupported" class="msg err" hidden></div>
+      <div id="expKey" hidden>
+        <div class="row"><span>This browser's key:</span><span class="m" id="expFp"></span><span id="expStatus" class="tag"></span></div>
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="expName" placeholder="Your name or this device" maxlength="40">
+          <button class="btn" id="btnRequest">Request access</button>
+          <button class="btn primary" id="btnExport">Download everything (JSON)</button>
+          <button class="btn" id="btnCopyKey">Copy public key</button>
+        </div>
+        <div id="expMsg" class="msg"></div>
+      </div>
+      <details style="margin-top:12px"><summary class="muted">Use an SSH key instead</summary>
+        <p class="muted">With an ed25519 SSH key and <code>hub/combolab_export.py</code> from the ComboLab repo:</p>
+        <pre class="box" id="cliHelp"></pre>
+      </details>
+    </section>
     <section class="card" style="margin-top:16px"><h2>Machines</h2><div class="scroll"><table id="machines"></table></div></section>
     <section class="card" style="margin-top:16px"><h2>Combos and merged profiles</h2><div class="scroll"><table id="combos"></table></div></section>
+  </div>
+
+  <!-- ------------------------------------------------ admin -->
+  <div id="adminPage" hidden>
+    <section class="card" id="login" hidden>
+      <h2>Admin sign-in</h2>
+      <form id="loginForm" class="row">
+        <input type="password" id="pw" placeholder="Admin password" autocomplete="current-password">
+        <button class="btn primary">Sign in</button>
+      </form>
+      <div id="loginMsg" class="msg"></div>
+    </section>
+    <div id="admin" hidden>
+      <section class="card"><h2>Export requests</h2><div class="scroll"><table id="requests"></table></div></section>
+      <section class="card" style="margin-top:16px">
+        <h2>Approved export keys</h2>
+        <div class="scroll"><table id="keys"></table></div>
+        <form id="addKeyForm" class="row" style="margin-top:12px">
+          <input type="text" id="akName" placeholder="Name" maxlength="40" style="width:160px">
+          <input type="text" id="akKey" placeholder="ssh-ed25519 AAAA..." style="flex:1;min-width:220px">
+          <button class="btn">Add key</button>
+        </form>
+        <div id="keyMsg" class="msg"></div>
+      </section>
+      <div class="grid2" style="margin-top:16px">
+        <section class="card">
+          <h2>Sync machines</h2>
+          <div class="scroll"><table id="amachines"></table></div>
+          <form id="addMachineForm" class="row" style="margin-top:12px">
+            <input type="text" id="amName" placeholder="new machine name" maxlength="60">
+            <button class="btn">Add machine</button>
+          </form>
+          <div id="machineMsg" class="msg"></div>
+        </section>
+        <section class="card">
+          <h2>Admin password</h2>
+          <form id="pwForm" style="display:grid;gap:8px;max-width:320px">
+            <input type="password" id="pwCur" placeholder="Current password" autocomplete="current-password">
+            <input type="password" id="pwNew" placeholder="New password (10+ characters)" autocomplete="new-password">
+            <button class="btn">Change password</button>
+          </form>
+          <div id="pwMsg" class="msg"></div>
+        </section>
+      </div>
+    </div>
   </div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let token = ""; try { token = localStorage.getItem("combolab_hub_token") || ""; } catch (e) {}
+const BASE = location.pathname.replace(/\/admin\/?$/, "/").replace(/[^/]*$/, "");
+const isAdmin = /\/admin\/?$/.test(location.pathname);
 const ago = t => {
   if (!t) return "never";
   const s = Math.max(0, Date.now() / 1000 - t);
@@ -87,28 +157,28 @@ const ago = t => {
   if (s < 129600) return Math.round(s / 3600) + " h ago";
   return Math.round(s / 86400) + " days ago";
 };
-async function api(path) {
-  const r = await fetch(path, {headers: {Authorization: "Bearer " + token}});
-  if (r.status === 401) throw new Error("That token isn't known to this hub.");
-  if (!r.ok) throw new Error("Hub error " + r.status);
-  return r.json();
+async function api(path, body, admin) {
+  const opt = body === undefined ? {} : {method: "POST", body: JSON.stringify(body), headers: {"Content-Type": "application/json"}};
+  if (admin) opt.headers = {...(opt.headers || {}), "X-ComboLab-Admin": "1"};
+  opt.credentials = "same-origin";
+  const r = await fetch(BASE + path, opt);
+  let d = null; try { d = await r.json(); } catch (e) {}
+  if (!r.ok) { const e = new Error((d && d.error) || ("Hub error " + r.status)); e.status = r.status; e.data = d; throw e; }
+  return d;
 }
-async function load() {
-  if (!token) { $("login").hidden = false; $("app").hidden = true; return; }
-  let d;
-  try { d = await api("api/v1/overview"); }
-  catch (e) { $("err").textContent = e.message; $("login").hidden = false; $("app").hidden = true; return; }
-  $("login").hidden = true; $("app").hidden = false; $("btnExport").hidden = false; $("btnLogout").hidden = false;
-  $("who").textContent = "signed in as " + d.me + " · hub " + d.version;
+const say = (id, text, kind) => { const el = $(id); el.textContent = text || ""; el.className = "msg" + (kind ? " " + kind : ""); };
+
+// ------------------------------------------------------------------ public overview
+async function loadOverview() {
+  const d = await api("api/v1/overview");
   const profs = d.combos.flatMap(c => c.profiles);
   const samples = d.combos.reduce((n, c) => n + (c.profiles.find(p => p.current)?.samples || 0), 0);
   $("stats").innerHTML = [[d.machines.length, "machines"], [d.combos.length, "combos"], [profs.filter(p => p.current).length, "profiles"], [samples.toLocaleString(), "samples (current versions)"]]
     .map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
-  const bk = {}; d.backups.forEach(b => { (bk[b.machine] ||= []).push(`${b.count} ${b.kind}`); });
-  $("machines").innerHTML = `<tr><th>Name</th><th>Last sync</th><th>Agent</th><th>Backups</th></tr>` + d.machines.map(m => {
+  $("machines").innerHTML = `<tr><th>Name</th><th>Last sync</th></tr>` + d.machines.map(m => {
     const fresh = m.last_seen && Date.now() / 1000 - m.last_seen < 120;
-    return `<tr><td><span class="dot ${fresh ? "on" : m.last_seen ? "warn" : ""}"></span>${esc(m.name)}</td><td>${ago(m.last_seen)}</td><td class="muted">${esc(m.agent || "")}</td><td class="muted">${esc((bk[m.name] || []).join(", ") || "–")}</td></tr>`;
-  }).join("");
+    return `<tr><td><span class="dot ${fresh ? "on" : m.last_seen ? "warn" : ""}"></span>${esc(m.name)}</td><td>${ago(m.last_seen)}</td></tr>`;
+  }).join("") || `<tr><td class="muted">No machines yet.</td></tr>`;
   let html = `<tr><th>Combo</th><th>Notation</th><th class="n">Samples</th><th>Recorded on</th><th>Updated</th></tr>`;
   let lastF = null;
   for (const c of d.combos) {
@@ -121,17 +191,153 @@ async function load() {
   }
   $("combos").innerHTML = html;
 }
-$("loginForm").onsubmit = e => { e.preventDefault(); token = $("tok").value.trim(); try { localStorage.setItem("combolab_hub_token", token); } catch (er) {} $("err").textContent = ""; load(); };
-$("btnLogout").onclick = () => { token = ""; try { localStorage.removeItem("combolab_hub_token"); } catch (e) {} location.reload(); };
-$("btnExport").onclick = async () => {
-  const d = await api("api/v1/export");
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], {type: "application/json"}));
-  a.download = "combolab-hub-" + new Date().toISOString().slice(0, 10) + ".json";
-  a.click();
+
+// ------------------------------------------------------------------ this browser's export key (Ed25519, kept in IndexedDB)
+const b64 = u8 => btoa(String.fromCharCode(...u8));
+const u32 = n => new Uint8Array([n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]);
+const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of a) { o.set(x, i); i += x.length; } return o; };
+const sshBlob = raw => { const t = new TextEncoder().encode("ssh-ed25519"); return cat(u32(t.length), t, u32(raw.length), raw); };
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("combolab-hub", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("keys");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbDo(mode, fn) {
+  const db = await idb();
+  return new Promise((res, rej) => { const tx = db.transaction("keys", mode); const r = fn(tx.objectStore("keys")); tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); });
+}
+let viewer = null;   // {keys, pub, fp}
+async function viewerKey() {
+  if (viewer) return viewer;
+  let keys = await idbDo("readonly", s => s.get("viewer"));
+  if (!keys) {
+    keys = await crypto.subtle.generateKey({name: "Ed25519"}, false, ["sign", "verify"]);   // private key can't be exported
+    await idbDo("readwrite", s => s.put(keys, "viewer"));
+  }
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey));
+  const blob = sshBlob(raw);
+  const fp = "SHA256:" + b64(new Uint8Array(await crypto.subtle.digest("SHA-256", blob))).replace(/=+$/, "");
+  viewer = {keys, pub: "ssh-ed25519 " + b64(blob) + " combolab-browser", fp};
+  return viewer;
+}
+async function setupExport() {
+  $("cliHelp").textContent = `python combolab_export.py ${location.origin}${BASE} --request "your name"\npython combolab_export.py ${location.origin}${BASE}`;
+  if (!window.isSecureContext || !crypto.subtle) { say("expUnsupported", "Exporting from the browser needs the hub over HTTPS.", "err"); $("expUnsupported").hidden = false; return; }
+  try { await viewerKey(); }
+  catch (e) { say("expUnsupported", "This browser can't make Ed25519 keys (needs a 2025-or-newer Chrome, Edge, Firefox or Safari). Use the SSH-key route below.", "err"); $("expUnsupported").hidden = false; return; }
+  $("expKey").hidden = false;
+  $("expFp").textContent = viewer.fp;
+  try { $("expName").value = localStorage.getItem("combolab_hub_name") || ""; } catch (e) {}
+  $("expStatus").textContent = "not checked yet";
+}
+$("btnCopyKey").onclick = async () => { await navigator.clipboard.writeText(viewer.pub); say("expMsg", "Public key copied. The admin can add it by hand on the Admin page.", "ok"); };
+$("btnRequest").onclick = async () => {
+  const name = $("expName").value.trim();
+  if (!name) { say("expMsg", "Put your name or this device in the box first.", "err"); return; }
+  try { localStorage.setItem("combolab_hub_name", name); } catch (e) {}
+  try {
+    const r = await api("api/v1/key-requests", {name, pubkey: viewer.pub});
+    $("expStatus").textContent = r.status;
+    say("expMsg", r.status === "approved" ? "This key is already approved: you can download." : "Requested. Once the admin approves it, Download works from this browser.", "ok");
+  } catch (e) { say("expMsg", e.message, "err"); }
 };
-load();
-setInterval(() => { if (token && !document.hidden) load(); }, 30000);
+$("btnExport").onclick = async () => {
+  $("btnExport").disabled = true;
+  say("expMsg", "Signing…");
+  try {
+    const ch = await api("api/v1/challenge");
+    const msg = new TextEncoder().encode(`combolab-export\n${ch.nonce}\n`);
+    const sig = new Uint8Array(await crypto.subtle.sign({name: "Ed25519"}, viewer.keys.privateKey, msg));
+    const d = await api("api/v1/export", {pubkey: viewer.pub, nonce: ch.nonce, sig: b64(sig), format: "raw"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], {type: "application/json"}));
+    a.download = "combolab-hub-" + new Date().toISOString().slice(0, 10) + ".json";
+    a.click();
+    $("expStatus").textContent = "approved";
+    say("expMsg", `Downloaded ${Object.keys(d.combos).length} combos and ${d.profiles.length} profiles.`, "ok");
+  } catch (e) {
+    if (e.status === 403 && /approved/.test(e.message)) { $("expStatus").textContent = "not approved"; say("expMsg", "This browser's key isn't approved yet. Request access, then ask the admin.", "err"); }
+    else say("expMsg", e.message, "err");
+  } finally { $("btnExport").disabled = false; }
+};
+
+// ------------------------------------------------------------------ admin
+async function loadAdmin() {
+  let st;
+  try { st = await api("api/v1/admin/state"); }
+  catch (e) {
+    if (e.status === 401) { $("login").hidden = false; $("admin").hidden = true; $("btnLogout").hidden = true; $("who").textContent = ""; return; }
+    throw e;
+  }
+  $("login").hidden = true; $("admin").hidden = false; $("btnLogout").hidden = false; $("who").textContent = "signed in as admin";
+  renderAdmin(st);
+}
+function renderAdmin(st) {
+  $("requests").innerHTML = `<tr><th>Name</th><th>Key fingerprint</th><th>From</th><th>When</th><th></th></tr>` + (st.requests.map((k, i) =>
+    `<tr><td>${esc(k.name)}</td><td class="m">${esc(k.fingerprint)}</td><td class="muted">${esc(k.addr || "")}</td><td class="muted">${ago(k.requested)}</td>
+     <td class="row"><button class="btn primary" data-act="approve" data-i="${i}">Approve</button><button class="btn danger" data-act="reject" data-i="${i}">Reject</button></td></tr>`).join("")
+    || `<tr><td colspan="5" class="muted">No pending requests. Viewers request access from the Export section of the overview.</td></tr>`);
+  $("requests").querySelectorAll("button").forEach(b => b.onclick = () => keyAction(b.dataset.act, st.requests[+b.dataset.i]));
+  $("keys").innerHTML = `<tr><th>Name</th><th>Key fingerprint</th><th>Approved</th><th>Last export</th><th></th></tr>` + (st.keys.map((k, i) =>
+    `<tr><td>${esc(k.name)}</td><td class="m">${esc(k.fingerprint)}</td><td class="muted">${ago(k.added)}</td><td class="muted">${k.last_export ? ago(k.last_export) : "never"}</td>
+     <td><button class="btn danger" data-i="${i}">Remove</button></td></tr>`).join("")
+    || `<tr><td colspan="5" class="muted">No approved keys yet.</td></tr>`);
+  $("keys").querySelectorAll("button").forEach(b => b.onclick = () => { if (confirm("Remove " + st.keys[+b.dataset.i].name + "'s key? It won't be able to export.")) keyAction("remove", st.keys[+b.dataset.i]); });
+  $("amachines").innerHTML = `<tr><th>Name</th><th>Last sync</th><th>From</th><th></th></tr>` + (st.machines.map((m, i) =>
+    `<tr><td>${esc(m.name)}</td><td class="muted">${ago(m.last_seen)}</td><td class="muted">${esc(m.addr || "")}</td><td><button class="btn danger" data-i="${i}">Remove</button></td></tr>`).join("")
+    || `<tr><td colspan="4" class="muted">No machines yet.</td></tr>`);
+  $("amachines").querySelectorAll("button").forEach(b => b.onclick = async () => {
+    const m = st.machines[+b.dataset.i];
+    if (!confirm(`Remove ${m.name}? It stops syncing; its samples stay in the profiles.`)) return;
+    try { renderAdmin(await api("api/v1/admin/machines", {action: "remove", name: m.name}, true)); say("machineMsg", "Removed " + m.name, "ok"); }
+    catch (e) { say("machineMsg", e.message, "err"); }
+  });
+  if (st.new_token) {
+    const t = st.new_token;
+    $("machineMsg").className = "msg ok";
+    $("machineMsg").innerHTML = `Added <b>${esc(t.name)}</b>. Its token is shown once; on that PC, in <span class="m">reframework\\data\\ComboLab</span>, run:<pre class="box">run_sync.bat setup ${esc(location.origin + BASE)} ${esc(t.token)}</pre>`;
+  }
+}
+async function keyAction(action, k, name) {
+  try { renderAdmin(await api("api/v1/admin/keys", {action, pubkey: k.key, name: name || k.name}, true)); say("keyMsg", action === "approve" ? `Approved ${k.name}.` : action === "remove" ? `Removed ${k.name}.` : `Rejected ${k.name}.`, "ok"); }
+  catch (e) { say("keyMsg", e.message, "err"); }
+}
+$("loginForm").onsubmit = async e => {
+  e.preventDefault();
+  try { await api("api/v1/admin/login", {password: $("pw").value}); $("pw").value = ""; say("loginMsg", ""); loadAdmin(); }
+  catch (er) { say("loginMsg", er.message, "err"); }
+};
+$("btnLogout").onclick = async () => { await api("api/v1/admin/logout", {}); loadAdmin(); };
+$("addKeyForm").onsubmit = async e => {
+  e.preventDefault();
+  const name = $("akName").value.trim(), key = $("akKey").value.trim();
+  if (!name || !key) { say("keyMsg", "Give the key a name and paste its ssh-ed25519 line.", "err"); return; }
+  try { renderAdmin(await api("api/v1/admin/keys", {action: "add", pubkey: key, name}, true)); $("akName").value = $("akKey").value = ""; say("keyMsg", "Added " + name + ".", "ok"); }
+  catch (er) { say("keyMsg", er.message, "err"); }
+};
+$("addMachineForm").onsubmit = async e => {
+  e.preventDefault();
+  try { renderAdmin(await api("api/v1/admin/machines", {action: "add", name: $("amName").value.trim()}, true)); $("amName").value = ""; }
+  catch (er) { say("machineMsg", er.message, "err"); }
+};
+$("pwForm").onsubmit = async e => {
+  e.preventDefault();
+  try { await api("api/v1/admin/password", {current: $("pwCur").value, new: $("pwNew").value}, true); $("pwCur").value = $("pwNew").value = ""; say("pwMsg", "Password changed. Sign in again.", "ok"); setTimeout(loadAdmin, 1200); }
+  catch (er) { say("pwMsg", er.message, "err"); }
+};
+
+// ------------------------------------------------------------------ start
+$("navView").href = BASE; $("navAdmin").href = BASE + "admin";
+if (isAdmin) {
+  $("navAdmin").classList.add("on"); $("adminPage").hidden = false; loadAdmin();
+} else {
+  $("navView").classList.add("on"); $("viewPage").hidden = false;
+  loadOverview().catch(e => { $("stats").textContent = e.message; });
+  setupExport();
+  setInterval(() => { if (!document.hidden) loadOverview().catch(() => {}); }, 30000);
+}
 </script>
 </body>
 </html>

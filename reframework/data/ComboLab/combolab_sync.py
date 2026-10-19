@@ -38,7 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import combolab_merge  # noqa: E402
 
-AGENT_VERSION = "1.7.0"
+AGENT_VERSION = "1.9.0"
 
 
 def canon(obj):

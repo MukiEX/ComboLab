@@ -130,6 +130,114 @@ print(table.concat(out, "\\n"))
     check(got == want, "Lua and Python merges agree\n  lua: %s\n  py:  %s" % (got[:2], want[:2]))
 
 
+# ------------------------------------------------------------------ access rules
+def http(url, path, body=None, headers=None, cookie=None):
+    import urllib.request, urllib.error
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url + path, data=data, method="POST" if data is not None else "GET")
+    req.add_header("Content-Type", "application/json")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
+    if cookie:
+        req.add_header("Cookie", cookie)
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, json.loads(r.read() or b"null"), r.headers
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read() or b"null"), e.headers
+
+
+def test_access(url):
+    import base64
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives import serialization
+    import hub_auth
+    combolab_hub.LOGIN_LIMIT.hits.clear()
+    # public: overview yes, export / admin / sync data no
+    code, ov, _ = http(url, "/api/v1/overview")
+    check(code == 200 and ov["combos"], "overview is public")
+    check(http(url, "/api/v1/admin/state")[0] == 401, "admin state needs sign-in")
+    check(http(url, "/api/v1/index")[0] == 401, "sync API still needs a machine token")
+    check(http(url, "/api/v1/export")[0] in (401, 404), "no unsigned GET export")
+
+    key = Ed25519PrivateKey.generate()
+    pub = key.public_key().public_bytes(serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH).decode()
+
+    def export(fmt="raw", k=key, p=None, nonce=None, tamper=False):
+        n = nonce or http(url, "/api/v1/challenge")[1]["nonce"]
+        msg = combolab_hub.export_message(n) + (b"x" if tamper else b"")
+        if fmt == "raw":
+            sig = base64.b64encode(k.sign(msg)).decode()
+        else:  # build what ssh-keygen -Y sign writes
+            S = hub_auth._string
+            raw = k.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+            import hashlib
+            signed = b"SSHSIG" + S(b"combolab-export") + S(b"") + S(b"sha512") + S(hashlib.sha512(msg).digest())
+            blob = (b"SSHSIG" + b"\x00\x00\x00\x01" + S(S(b"ssh-ed25519") + S(raw)) + S(b"combolab-export") + S(b"")
+                    + S(b"sha512") + S(S(b"ssh-ed25519") + S(k.sign(signed))))
+            sig = "-----BEGIN SSH SIGNATURE-----\n" + base64.b64encode(blob).decode() + "\n-----END SSH SIGNATURE-----\n"
+        return http(url, "/api/v1/export", {"pubkey": p or pub, "nonce": n, "sig": sig, "format": fmt}), n
+
+    (code, d, _), _ = export()
+    check(code == 403 and "approved" in d["error"], "unapproved key can't export")
+    # viewer asks for access
+    code, d, _ = http(url, "/api/v1/key-requests", {"name": "Lab laptop", "pubkey": pub})
+    check(code == 200 and d["status"] == "pending", "key request recorded")
+    check(http(url, "/api/v1/key-requests", {"name": "x", "pubkey": "ssh-rsa AAAA"})[0] == 400, "only ed25519 keys")
+
+    # admin: no password yet, then wrong, then right
+    code, d, _ = http(url, "/api/v1/admin/login", {"password": "whatever"})
+    check(code == 409, "login refused until a password is set")
+    combolab_hub.STORE.set_meta("admin_pw", hub_auth.hash_password("correct horse battery"))
+    check(http(url, "/api/v1/admin/login", {"password": "nope"})[0] == 401, "wrong password refused")
+    code, d, h = http(url, "/api/v1/admin/login", {"password": "correct horse battery"})
+    cookie = h["Set-Cookie"].split(";")[0]
+    check(code == 200 and "HttpOnly" in h["Set-Cookie"] and "SameSite=Strict" in h["Set-Cookie"], "session cookie set")
+    code, st, _ = http(url, "/api/v1/admin/state", cookie=cookie)
+    check(code == 200 and len(st["requests"]) == 1 and st["requests"][0]["name"] == "Lab laptop", "admin sees the request")
+    # writes need the admin header (blocks cross-site form posts)
+    check(http(url, "/api/v1/admin/keys", {"action": "approve", "pubkey": pub}, cookie=cookie)[0] == 403, "admin writes need the header")
+    code, st, _ = http(url, "/api/v1/admin/keys", {"action": "approve", "pubkey": pub}, {"X-ComboLab-Admin": "1"}, cookie)
+    check(code == 200 and st["keys"][0]["name"] == "Lab laptop" and not st["requests"], "approved")
+
+    (code, d, _), n = export()
+    check(code == 200 and "combos" in d and d["combos"], "approved key exports (browser signature)")
+    (code, d, _), _ = export(nonce=n)
+    check(code == 400, "a challenge can't be reused")
+    (code, d, _), _ = export(fmt="sshsig")
+    check(code == 200 and d["combos"], "approved key exports (ssh-keygen signature)")
+    (code, d, _), _ = export(tamper=True)
+    check(code == 403, "bad signature refused")
+    other = Ed25519PrivateKey.generate()
+    (code, d, _), _ = export(k=other)
+    check(code == 403, "someone else's signature for my key refused")
+    # admin adds a machine from the page; the token works for sync
+    code, st, _ = http(url, "/api/v1/admin/machines", {"action": "add", "name": "pc-c"}, {"X-ComboLab-Admin": "1"}, cookie)
+    tok = st["new_token"]["token"]
+    check(http(url, "/api/v1/index", headers={"Authorization": "Bearer " + tok})[0] == 200, "machine added from the admin page syncs")
+    # remove the key: exports stop
+    http(url, "/api/v1/admin/keys", {"action": "remove", "pubkey": pub}, {"X-ComboLab-Admin": "1"}, cookie)
+    (code, d, _), _ = export()
+    check(code == 403, "removed key can't export")
+    # sign out
+    http(url, "/api/v1/admin/logout", {}, cookie=cookie)
+    check(http(url, "/api/v1/admin/state", cookie=cookie)[0] == 401, "signed out")
+    # lockout after repeated wrong passwords
+    codes = [http(url, "/api/v1/admin/login", {"password": "bad"})[0] for _ in range(6)]
+    check(codes[-1] == 429, "locked out after 5 wrong passwords")
+
+
+def test_sshsig_vector():
+    import hub_auth
+    d = os.path.join(ROOT, "tests", "testdata", "sshsig")
+    raw = hub_auth.parse_public_key(open(os.path.join(d, "ed25519.pub")).read())
+    msg = open(os.path.join(d, "signed-data"), "rb").read()
+    sig = open(os.path.join(d, "ed25519.sig")).read()
+    ns = open(os.path.join(d, "namespace")).read().strip()
+    check(hub_auth.verify_sshsig(sig, raw, msg, ns), "OpenSSH's own signature verifies")
+    check(not hub_auth.verify_sshsig(sig, raw, msg + b"!", ns), "tampered message refused")
+
+
 # ------------------------------------------------------------------ end to end
 def test_end_to_end():
     tmp = tempfile.mkdtemp()
@@ -203,8 +311,9 @@ def test_end_to_end():
         A.sync_once()
         check(combolab_sync.read_json(os.path.join(ra, "combos", "mai-x.json"))["name"] == "Mai X (edited)", "combo edit propagated")
 
-        ov = combolab_hub.overview("pc-a")
+        ov = combolab_hub.overview()
         check(len(ov["machines"]) == 2 and ov["combos"][0]["name"] == "Mai X (edited)", "overview lists machines and combos")
+        test_access(url)
         srv.shutdown()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -212,6 +321,7 @@ def test_end_to_end():
 
 if __name__ == "__main__":
     test_merge_rules()
+    test_sshsig_vector()
     test_lua_parity()
     test_end_to_end()
     print("hub OK" if not FAILS else "%d failures" % len(FAILS))

@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.8.0"
+local VERSION = "1.9.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -475,7 +475,7 @@ local function write_status()
         in_training = in_training,
         tick_source = Game.source,
         hook_ok = Game.hook_ok,
-        fighter_id = fighter_id,
+        fighter_id = fighter_id, opp_fighter_id = Profile.OPP,
         modern = modern,
         attempts = S.profile and S.profile.attempts or 0,
         successes = S.profile and S.profile.successes or 0,
@@ -627,6 +627,9 @@ re.on_frame(function()
                 status_dirty = true
             end
             modern = info.modern or false
+            -- the dummy's character goes on every sample (combos can depend on it)
+            local opp = Game.side_info(1 - Game.user).fighter_id
+            if opp ~= Profile.OPP then Profile.OPP = opp; status_dirty = true end
         end
     end
     if S.bot.running and not in_training then S.bot:stop("left Training mode") end

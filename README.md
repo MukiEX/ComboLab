@@ -46,7 +46,37 @@ docker compose -f hub/docker-compose.yml up -d --build
 docker compose -f hub/docker-compose.yml run --rm hub add-machine living-room-pc
 ```
 
-Point your proxy's subdomain at `127.0.0.1:8770` (`hub/Caddyfile.example`, `hub/nginx.example.conf`; there's also a systemd unit, `hub/combolab-hub.service`). Opening the subdomain in a browser shows an overview: machines, combos, sample counts, and which machines recorded them. Paste any machine token there to sign in. `combolab_hub.py export <folder>` writes everything out as plain JSON files for backups.
+Point your proxy's subdomain at `127.0.0.1:8770` (`hub/Caddyfile.example`, `hub/nginx.example.conf`; there's also a systemd unit, `hub/combolab-hub.service`). Then set the admin password:
+
+```
+python3 hub/combolab_hub.py set-admin-password
+docker compose -f hub/docker-compose.yml run --rm hub set-admin-password      # Docker
+```
+
+**Who can do what:**
+
+| Who | Can |
+|---|---|
+| Anyone | Open the overview: machines, combos, sample counts, which machines recorded them |
+| Sync machines (token) | Sync combos and profiles, back up and restore their own sessions |
+| Approved viewer keys | Download everything as one JSON file |
+| Admin (password, at `/admin`) | Approve or remove viewer keys, add or remove sync machines (the new token is shown once), change the password |
+
+**Exporting:**
+- **From a browser:** open the hub's overview, type a name in the Export section and click **Request access**. The browser makes its own Ed25519 key; the private half can't be exported, even by the page. Once the admin approves the request on `/admin`, **Download everything** works from that browser. Each download signs a fresh one-time challenge.
+- **With an SSH key** (ed25519, OpenSSH 8.1+):
+  ```
+  python combolab_export.py https://combolab.example.com --request "my laptop"
+  python combolab_export.py https://combolab.example.com
+  ```
+  Or the admin pastes the `ssh-ed25519 ...` line into **Add key**.
+
+**Admin security:**
+- Admin sign-in uses a session cookie (HttpOnly, SameSite=Strict, Secure behind HTTPS, 12 hours).
+- Five wrong passwords lock that address out for 15 minutes.
+- The password is stored as a PBKDF2 hash.
+
+Server-side backups: `combolab_hub.py export <folder>` writes everything out as plain JSON files. `allow-key`, `list-keys` and `remove-key` manage keys from the shell.
 
 **On each gaming PC**, once, in `reframework\data\ComboLab`:
 
@@ -55,6 +85,8 @@ run_sync.bat setup https://combolab.example.com <token>
 ```
 
 From then on, **run_server.bat** syncs in the background every 20 seconds (or run `run_sync.bat` on its own). The page's header shows "Hub: synced just now".
+
+Every sample also records the training dummy's character, shown on the web page's profile tab ("recorded against") and in the chart's tooltips.
 
 **What syncs:**
 

@@ -398,7 +398,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.8.0";
+const PAGE_VERSION = "1.9.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -740,7 +740,7 @@ function renderHeaderStatus() {
   const live = age < 12;
   pg.innerHTML = `<span class="dot ${live ? (s.in_training ? "on" : "warn") : "off"}"></span><span>${live ? (s.in_training ? "Game: in Training" : "Game: running (not in Training)") : "Game: not running"}${s.version ? " · mod v" + esc(s.version) : ""}${s.version && s.version !== PAGE_VERSION ? ` <b style="color:var(--warning)">(page is v${PAGE_VERSION}: update the mod files)</b>` : ""}</span>`;
   const c = s.combo_id && st.combos[s.combo_id];
-  pa.innerHTML = c ? `<span>${s.mode === "train" ? "TRAIN" : "DEVELOP"} · ${esc(c.name || c.id)}</span>` : `<span>Nothing loaded in game</span>`;
+  pa.innerHTML = c ? `<span>${s.mode === "train" ? "TRAIN" : "DEVELOP"} · ${esc(c.name || c.id)}${s.opp_fighter_id ? ` · vs ${esc(FIGHTERS[s.opp_fighter_id] || "#" + s.opp_fighter_id)}` : ""}</span>` : `<span>Nothing loaded in game</span>`;
 }
 
 /* ===================== editor ===================== */
@@ -917,6 +917,14 @@ function renderProfile() {
     <div class="tile"><div class="v">${P.attempts || 0}</div><div class="l">develop attempts</div></div>
     <div class="tile"><div class="v">${P.successes || 0}</div><div class="l">clean (${rate}%)</div></div>
     <div class="tile"><div class="v">${W.filter((w, i) => i > 0 && w && w.n).length}/${Math.max(0, steps.length - 1)}</div><div class="l">steps with a window</div></div>
+    ${(() => {
+      // attempts per dummy character: each attempt leaves at most one sample per step
+      const per = {};
+      P.steps.forEach((st, i) => { if (!i) return; const n = {}; arr(st?.samples).forEach(x => { const k = x.opp ?? "?"; n[k] = (n[k] || 0) + 1; }); for (const k in n) per[k] = Math.max(per[k] || 0, n[k]); });
+      const keys = Object.keys(per).filter(k => k !== "?");
+      if (!keys.length) return "";
+      return `<div class="tile"><div class="v" style="font-size:15px;line-height:1.5">${keys.sort((a, b) => per[b] - per[a]).map(k => `${esc(FIGHTERS[k] || "#" + k)} <span class="muted">${per[k]}</span>`).join("<br>")}</div><div class="l">recorded against${per["?"] ? ` (+${per["?"]} older, unknown)` : ""}</div></div>`;
+    })()}
     ${hasPred ? `<div class="tile"><div class="v">${W.filter((w, i) => i > 0 && w && w.pred_E != null).length}/${Math.max(0, steps.length - 1)}</div><div class="l">predicted from frame data</div></div>` : ""}
   </div>`;
   // shared frame axis
@@ -992,7 +1000,7 @@ function renderProfile() {
     el.addEventListener("mousemove", e => {
       if (el.dataset.p != null) {
         const {i, sm} = pts[+el.dataset.p];
-        showTip(e, `<b>${esc(steps[i].label)}</b> pressed at <b>+${sm.p}f</b><br>${RES_LABEL[sm.res] || sm.res}${sm.q != null ? `, came out at +${sm.q}` : ""}${sm.r ? `, ${sm.r}f hitstun left` : ""}${sm.spam ? `<br>${sm.spam} extra press${sm.spam > 1 ? "es" : ""}` : ""}<br><span class="muted">${sm.mode === "train" ? "train" : "develop"}</span>`);
+        showTip(e, `<b>${esc(steps[i].label)}</b> pressed at <b>+${sm.p}f</b><br>${RES_LABEL[sm.res] || sm.res}${sm.q != null ? `, came out at +${sm.q}` : ""}${sm.r ? `, ${sm.r}f hitstun left` : ""}${sm.spam ? `<br>${sm.spam} extra press${sm.spam > 1 ? "es" : ""}` : ""}<br><span class="muted">${sm.mode === "train" ? "train" : sm.mode === "bot" ? "bot" : "develop"}${sm.opp != null ? ` · vs ${esc(FIGHTERS[sm.opp] || "#" + sm.opp)}` : ""}</span>`);
       } else if (el.dataset.k.startsWith("pred")) {
         const i = +el.dataset.k.slice(4); const w = W[i];
         showTip(e, `<b>${esc(steps[i].label)}</b><br>predicted from the game's frame data: +${w.pred_E} to +${w.pred_L} (${esc(w.pred_kind || "")})<br><span class="muted">the bot checks these edges first</span>`);
