@@ -399,7 +399,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.10.0";
+const PAGE_VERSION = "1.10.1";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -475,20 +475,29 @@ function motionGlyph(p) {
 }
 
 const glyphSvgCache = {};
+// fighting-game command-list style: orange body, yellow gloss, dark outline, big head
 function glyphSvg(p) {
   const key = p.t + (p.seq || "");
   if (glyphSvgCache[key]) return glyphSvgCache[key];
-  const g = motionGlyph(p), sw = 0.16, hl = sw * 2, hw = sw * 1.65, cut = hl * 0.6;
+  const g = motionGlyph(p), sw = 0.24, hl = sw * 1.75, hw = sw * 1.45, cut = hl * 0.6, ol = sw * 0.22;
   const [hx, hy, dx, dy] = g.head;
   const pts = g.pts.slice();
   while (pts.length > 2 && Math.hypot(pts[pts.length - 1][0] - hx, pts[pts.length - 1][1] - hy) < cut) pts.pop();
   pts.push([hx - dx * cut, hy - dy * cut]);
   const f = v => v.toFixed(3);
   const d = pts.map((q, i) => (i ? "L" : "M") + f(q[0]) + " " + f(q[1])).join("");
-  const bx = hx - dx * hl, by = hy - dy * hl, nx = -dy, ny = dx;
-  const head = [[hx, hy], [bx + nx * hw, by + ny * hw], [bx + dx * hl * 0.25, by + dy * hl * 0.25], [bx - nx * hw, by - ny * hw]].map(q => f(q[0]) + "," + f(q[1])).join(" ");
-  const pad = 0.2, W = g.aspect + pad * 2, H = 1 + pad * 2;
-  const svg = `<svg class="mo" viewBox="${-pad} ${-pad} ${f(W)} ${f(H)}" style="width:${f(W / H * 1.3)}em" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/><polygon points="${head}" fill="currentColor"/></svg>`;
+  const head = (grow, oy = 0) => {
+    const bx = hx - dx * hl, by = hy - dy * hl + oy, nx = -dy, ny = dx, w = hw + grow;
+    return [[hx + dx * grow * 1.6, hy + oy + dy * grow * 1.6], [bx - dx * grow + nx * w, by - dy * grow + ny * w],
+            [bx + dx * hl * 0.25, by + dy * hl * 0.25], [bx - dx * grow - nx * w, by - dy * grow - ny * w]].map(q => f(q[0]) + "," + f(q[1])).join(" ");
+  };
+  const gy = -sw * 0.12;
+  const line = (w, c, oy = 0) => `<path d="${d}" transform="translate(0 ${f(oy)})" fill="none" stroke="${c}" stroke-width="${f(w)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const pad = 0.32, W = g.aspect + pad * 2, H = 1 + pad * 2;
+  const svg = `<svg class="mo" viewBox="${-pad} ${-pad} ${f(W)} ${f(H)}" style="width:${f(W / H * 1.3)}em" aria-hidden="true">`
+    + line(sw + ol * 2, "#461e00") + `<polygon points="${head(ol)}" fill="#461e00"/>`
+    + line(sw, "#ff8000") + `<polygon points="${head(0)}" fill="#ff8000"/>`
+    + line(sw * 0.5, "#ffe428", gy) + `<polygon points="${head(-sw * 0.38, gy)}" fill="#ffe428"/></svg>`;
   return (glyphSvgCache[key] = svg);
 }
 

@@ -99,7 +99,7 @@ local function rich(label, f, arrows)
         return { { t = "text", s = label, w = w } }, w
     end
     local _, th = measure("Ag", f)
-    local gh = th * 0.92
+    local gh = th * 1.05
     local items, total = {}, 0
     for _, p in ipairs(Motion.parse(label)) do
         local it
@@ -107,7 +107,7 @@ local function rich(label, f, arrows)
             it = { t = "text", s = p.s, w = measure(p.s, f) }
         else
             local g = glyph_of(p)
-            it = { t = "glyph", g = g, gh = gh, pad = th * 0.07, w = gh * g.aspect + th * 0.14 }
+            it = { t = "glyph", g = g, gh = gh, pad = th * 0.06, w = gh * g.aspect + th * 0.12 }
         end
         items[#items + 1] = it
         total = total + it.w
@@ -137,17 +137,26 @@ local function stroke(pts, w, col)
 end
 
 -- draws one glyph with its top-left at (x, y), height h
+-- Motion arrows in the style of fighting-game command lists: a thick
+-- orange body with a bright yellow highlight down its middle, a dark outline
+-- and a big head. `col` only sets the opacity (notes fade in and out).
+local ARROW_EDGE = rgba(70, 30, 0, 240)
+local ARROW_BODY = rgba(255, 128, 0)
+local ARROW_GLOSS = rgba(255, 228, 40)
 local function draw_glyph(g, x, y, h, col)
-    local sw = math.max(2, h * 0.16)
-    local hl, hw = sw * 2.0, sw * 1.65               -- arrowhead length / half width
-    local ol = math.max(1.5, sw * 0.35)              -- dark outline
-    local dark = with_alpha(rgba(0, 0, 0, 230), alpha_of(col))
-    local hx, hy = x + g.head[1] * h, y + g.head[2] * h
+    local a = alpha_of(col)
+    local sw = math.max(3, h * 0.24)
+    local inset = sw * 0.5                           -- keep the thick stroke inside the box
+    local hh = h - 2 * inset
+    x, y = x + inset, y + inset
+    local hl, hw = sw * 1.75, sw * 1.45              -- arrowhead length / half width
+    local ol = math.max(1.5, sw * 0.22)              -- dark outline
+    local hx, hy = x + g.head[1] * hh, y + g.head[2] * hh
     local dx, dy = g.head[3], g.head[4]
     local px = {}
     for i, l in ipairs(g.lines) do
         local q = {}
-        for j = 1, #l, 2 do q[j] = x + l[j] * h; q[j + 1] = y + l[j + 1] * h end
+        for j = 1, #l, 2 do q[j] = x + l[j] * hh; q[j + 1] = y + l[j + 1] * hh end
         if i == 1 then
             -- pull the stroke back so it ends inside the arrowhead
             local cut = hl * 0.6
@@ -156,10 +165,11 @@ local function draw_glyph(g, x, y, h, col)
         end
         px[i] = q
     end
-    local function head(grow, c)
-        local bx, by = hx - dx * hl, hy - dy * hl
+    local function head(grow, c, ox, oy)
+        ox, oy = ox or 0, oy or 0
+        local bx, by = hx - dx * hl + ox, hy - dy * hl + oy
         local nx, ny = -dy, dx
-        local tx, ty = hx + dx * grow * 1.6, hy + dy * grow * 1.6
+        local tx, ty = hx + ox + dx * grow * 1.6, hy + oy + dy * grow * 1.6
         local w = hw + grow
         local ax, ay = bx - dx * grow + nx * w, by - dy * grow + ny * w
         local cx, cy = bx - dx * grow - nx * w, by - dy * grow - ny * w
@@ -169,10 +179,20 @@ local function draw_glyph(g, x, y, h, col)
             draw.line(ax, ay, tx, ty, c, sw); draw.line(cx, cy, tx, ty, c, sw)
         end
     end
-    for _, q in ipairs(px) do stroke(q, sw + ol * 2, dark) end
-    head(ol, dark)
-    for _, q in ipairs(px) do stroke(q, sw, col) end
-    head(0, col)
+    local function shifted(q, ox, oy)
+        local o = {}
+        for j = 1, #q, 2 do o[j] = q[j] + ox; o[j + 1] = q[j + 1] + oy end
+        return o
+    end
+    local edge, body, gloss = with_alpha(ARROW_EDGE, a), with_alpha(ARROW_BODY, a), with_alpha(ARROW_GLOSS, a)
+    for _, q in ipairs(px) do stroke(q, sw + ol * 2, edge) end
+    head(ol, edge)
+    for _, q in ipairs(px) do stroke(q, sw, body) end
+    head(0, body)
+    -- glossy highlight, nudged up a little
+    local gy = -sw * 0.12
+    for _, q in ipairs(px) do stroke(shifted(q, 0, gy), sw * 0.5, gloss) end
+    head(-sw * 0.38, gloss, 0, gy)
 end
 
 -- glyph pass (draw layer) and text pass (imgui layer) for a laid-out label
