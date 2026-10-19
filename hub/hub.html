@@ -292,7 +292,7 @@ function renderAdmin(st) {
   $("amachines").querySelectorAll("button").forEach(b => b.onclick = async () => {
     const m = st.machines[+b.dataset.i];
     if (!confirm(`Remove ${m.name}? It stops syncing; its samples stay in the profiles.`)) return;
-    try { renderAdmin(await api("api/v1/admin/machines", {action: "remove", name: m.name}, true)); say("machineMsg", "Removed " + m.name, "ok"); }
+    try { renderAdmin(await api("api/v1/admin/machines", {action: "remove", id: m.id, name: m.name}, true)); say("machineMsg", "Removed " + m.name, "ok"); }
     catch (e) { say("machineMsg", e.message, "err"); }
   });
   $("mreqBox").hidden = !st.machine_requests.length;

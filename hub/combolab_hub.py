@@ -38,7 +38,7 @@ import combolab_merge  # noqa: E402
 sys.path.insert(0, HERE)
 import hub_auth  # noqa: E402
 
-HUB_VERSION = "1.11.0"
+HUB_VERSION = "1.12.0"
 MAX_BODY = 16 * 1024 * 1024
 BACKUP_KINDS = ("sessions", "bot")
 EXPORT_NAMESPACE = "combolab-export"
@@ -160,8 +160,8 @@ class Store:
         self.lock = threading.Lock()
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
-            CREATE TABLE IF NOT EXISTS machines (name TEXT PRIMARY KEY, token_sha TEXT UNIQUE, created INTEGER,
-                last_seen INTEGER, agent TEXT, addr TEXT, mod_id TEXT);
+            CREATE TABLE IF NOT EXISTS machines (id TEXT PRIMARY KEY, name TEXT UNIQUE, token_sha TEXT UNIQUE,
+                created INTEGER, last_seen INTEGER, agent TEXT, addr TEXT, mod_id TEXT);
             CREATE TABLE IF NOT EXISTS combos (id TEXT PRIMARY KEY, rev INTEGER, sha TEXT, data TEXT,
                 updated INTEGER, by TEXT);
             CREATE TABLE IF NOT EXISTS profiles (id TEXT, hash TEXT, rev INTEGER, data TEXT, samples INTEGER,
@@ -172,6 +172,29 @@ class Store:
             CREATE TABLE IF NOT EXISTS key_requests (key TEXT PRIMARY KEY, name TEXT, requested INTEGER, addr TEXT);
             CREATE TABLE IF NOT EXISTS machine_requests (name TEXT PRIMARY KEY, token_sha TEXT UNIQUE, requested INTEGER, addr TEXT);
         """)
+        self._migrate_machine_ids()
+
+    def _migrate_machine_ids(self):
+        """Hubs before 1.12 keyed machines by name. Give each one a permanent
+        hidden id and point combos / profiles / backups at it."""
+        cols = [r[1] for r in self.db.execute("PRAGMA table_info(machines)").fetchall()]
+        if "id" in cols:
+            return
+        with self.lock:
+            self.db.execute("BEGIN")
+            self.db.execute("ALTER TABLE machines RENAME TO machines_old")
+            self.db.execute("""CREATE TABLE machines (id TEXT PRIMARY KEY, name TEXT UNIQUE, token_sha TEXT UNIQUE,
+                created INTEGER, last_seen INTEGER, agent TEXT, addr TEXT, mod_id TEXT)""")
+            for name, tsha, cr, ls, ag, ad, mid in self.db.execute(
+                    "SELECT name, token_sha, created, last_seen, agent, addr, mod_id FROM machines_old").fetchall():
+                new_id = secrets.token_hex(8)
+                self.db.execute("INSERT INTO machines (id, name, token_sha, created, last_seen, agent, addr, mod_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                (new_id, name, tsha, cr, ls, ag, ad, mid))
+                self.db.execute("UPDATE combos SET by=? WHERE by=?", (new_id, name))
+                self.db.execute("UPDATE profiles SET by=? WHERE by=?", (new_id, name))
+                self.db.execute("UPDATE backups SET machine=? WHERE machine=?", (new_id, name))
+            self.db.execute("DROP TABLE machines_old")
+            self.db.execute("COMMIT")
 
     def q(self, sql, args=()):
         with self.lock:
@@ -227,21 +250,39 @@ class Store:
         self.q("DELETE FROM key_requests WHERE key=?", (self._k(raw),))
 
     # ---------------------------------------------------------------- machines
+    # Each machine has a permanent hidden id; its name is only a label it can change.
     def add_machine(self, name):
+        """New machine, or a new token for an existing one (same id). Returns the token."""
         tok = secrets.token_urlsafe(32)
         with self.lock:
-            self.db.execute("INSERT OR REPLACE INTO machines (name, token_sha, created) VALUES (?, ?, ?)",
-                            (name, token_hash(tok), int(time.time())))
+            row = self.db.execute("SELECT id FROM machines WHERE name=?", (name,)).fetchone()
+            if row:
+                self.db.execute("UPDATE machines SET token_sha=? WHERE id=?", (token_hash(tok), row[0]))
+            else:
+                self.db.execute("INSERT INTO machines (id, name, token_sha, created) VALUES (?, ?, ?, ?)",
+                                (secrets.token_hex(8), name, token_hash(tok), int(time.time())))
         return tok
 
     def machine_for(self, tok):
+        """Token -> machine id (or None)."""
         if not tok:
             return None
         h = token_hash(tok)
-        for name, th in self.q("SELECT name, token_sha FROM machines"):
+        for mid, th in self.q("SELECT id, token_sha FROM machines"):
             if hmac.compare_digest(th, h):
-                return name
+                return mid
         return None
+
+    def name_of(self, mid):
+        row = self.q("SELECT name FROM machines WHERE id=?", (mid,))
+        return row[0][0] if row else None
+
+    def id_of(self, name_or_id):
+        row = self.q("SELECT id FROM machines WHERE name=? OR id=?", (name_or_id, name_or_id))
+        return row[0][0] if row else None
+
+    def names(self):
+        return {mid: n for mid, n in self.q("SELECT id, name FROM machines")}
 
     # ---------------------------------------------------------------- PCs asking to join
     def request_machine(self, name, token_sha, addr):
@@ -265,31 +306,34 @@ class Store:
 
     def approve_machine(self, name):
         row = self.q("SELECT token_sha FROM machine_requests WHERE name=?", (name,))
-        if not row:
+        if not row or self.q("SELECT 1 FROM machines WHERE name=?", (name,)):
             return False
         with self.lock:
-            self.db.execute("INSERT OR REPLACE INTO machines (name, token_sha, created) VALUES (?, ?, ?)", (name, row[0][0], int(time.time())))
+            self.db.execute("INSERT INTO machines (id, name, token_sha, created) VALUES (?, ?, ?, ?)",
+                            (secrets.token_hex(8), name, row[0][0], int(time.time())))
             self.db.execute("DELETE FROM machine_requests WHERE name=?", (name,))
         return True
 
-    def rename_machine(self, old, new):
-        if self.q("SELECT 1 FROM machines WHERE name=?", (new,)) or self.q("SELECT 1 FROM machine_requests WHERE name=?", (new,)):
+    def rename_machine(self, mid, new):
+        """Only the label changes; everything the hub records points at the id."""
+        row = self.q("SELECT id FROM machines WHERE name=?", (new,))
+        if (row and row[0][0] != mid) or self.q("SELECT 1 FROM machine_requests WHERE name=?", (new,)):
             return False
-        with self.lock:
-            self.db.execute("BEGIN")
-            self.db.execute("UPDATE machines SET name=? WHERE name=?", (new, old))
-            self.db.execute("UPDATE combos SET by=? WHERE by=?", (new, old))
-            self.db.execute("UPDATE profiles SET by=? WHERE by=?", (new, old))
-            self.db.execute("UPDATE backups SET machine=? WHERE machine=?", (new, old))
-            self.db.execute("COMMIT")
+        self.q("UPDATE machines SET name=? WHERE id=?", (new, mid))
         return True
 
-    def seen(self, name, agent, addr, mod_id=None):
+    def remove_machine(self, name_or_id):
+        mid = self.id_of(name_or_id)
+        if mid:
+            self.q("DELETE FROM machines WHERE id=?", (mid,))
+        return mid
+
+    def seen(self, mid, agent, addr, mod_id=None):
         with self.lock:
-            self.db.execute("UPDATE machines SET last_seen=?, agent=?, addr=? WHERE name=?",
-                            (int(time.time()), agent, addr, name))
+            self.db.execute("UPDATE machines SET last_seen=?, agent=?, addr=? WHERE id=?",
+                            (int(time.time()), agent, addr, mid))
             if mod_id and valid_id(mod_id):
-                self.db.execute("UPDATE machines SET mod_id=? WHERE name=?", (mod_id, name))
+                self.db.execute("UPDATE machines SET mod_id=? WHERE id=?", (mod_id, mid))
 
     # ---------------------------------------------------------------- combos
     def put_combo(self, cid, data, by):
@@ -366,8 +410,8 @@ class Handler(BaseHTTPRequestHandler):
         """Sync agents: per-machine bearer token."""
         a = self.headers.get("Authorization", "")
         tok = a[7:].strip() if a.lower().startswith("bearer ") else ""
-        name = STORE.machine_for(tok)
-        if not name:
+        mid = STORE.machine_for(tok)
+        if not mid:
             pending = STORE.pending_machine(tok)
             if pending:
                 self._json(401, {"error": "waiting for the hub's admin to approve '%s'" % pending, "pending": pending})
@@ -377,8 +421,8 @@ class Handler(BaseHTTPRequestHandler):
             return None
         ua = self.headers.get("User-Agent", "")
         if ua.startswith("ComboLab-sync/"):  # only count real syncs as activity
-            STORE.seen(name, ua, self.client_ip(), self.headers.get("X-ComboLab-Machine-Id"))
-        return name
+            STORE.seen(mid, ua, self.client_ip(), self.headers.get("X-ComboLab-Machine-Id"))
+        return mid
 
     def _cookie(self, name):
         for part in (self.headers.get("Cookie") or "").split(";"):
@@ -443,7 +487,7 @@ class Handler(BaseHTTPRequestHandler):
             profiles = {}
             for cid, h, rev in STORE.q("SELECT id, hash, rev FROM profiles"):
                 profiles.setdefault(cid, {})[h] = rev
-            return self._json(200, {"machine": me, "version": HUB_VERSION, "combos": combos, "profiles": profiles})
+            return self._json(200, {"machine": STORE.name_of(me), "version": HUB_VERSION, "combos": combos, "profiles": profiles})
         if len(p) == 2 and p[0] == "combos":
             row = STORE.q("SELECT rev, data FROM combos WHERE id=?", (p[1],))
             if not row:
@@ -455,11 +499,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(404, {"error": "no such profile"})
             return self._json(200, {"rev": row[0][0], "data": json.loads(row[0][1])})
         if p == ["backups"]:
-            m = q.get("machine") or me
-            rows = STORE.q("SELECT machine, kind, id, updated FROM backups WHERE machine=? ORDER BY kind, id", (m,))
-            return self._json(200, {"items": [{"machine": a, "kind": b, "id": c, "updated": d} for a, b, c, d in rows]})
+            m = STORE.id_of(q["machine"]) if q.get("machine") else me
+            rows = STORE.q("SELECT kind, id, updated FROM backups WHERE machine=? ORDER BY kind, id", (m,))
+            nm = STORE.name_of(m) or m
+            return self._json(200, {"items": [{"machine": nm, "kind": b, "id": c, "updated": d} for b, c, d in rows]})
         if len(p) == 3 and p[0] == "backups":
-            m = q.get("machine") or me
+            m = STORE.id_of(q["machine"]) if q.get("machine") else me
             row = STORE.q("SELECT data, updated FROM backups WHERE machine=? AND kind=? AND id=?", (m, p[1], p[2]))
             if not row:
                 return self._json(404, {"error": "no such backup"})
@@ -509,8 +554,6 @@ class Handler(BaseHTTPRequestHandler):
             new = str(body.get("name") or "")
             if not valid_id(new) or len(new) > 60:
                 return self._json(400, {"error": "names use letters, digits, - _ . (up to 60)"})
-            if new == me:
-                return self._json(200, {"machine": me})
             if not STORE.rename_machine(me, new):
                 return self._json(409, {"error": "the hub already has a machine called '%s'" % new})
             return self._json(200, {"machine": new})
@@ -623,7 +666,7 @@ class Handler(BaseHTTPRequestHandler):
                 st["new_token"] = {"name": name, "token": tok}
                 return self._json(200, st)
             if action == "remove":
-                STORE.q("DELETE FROM machines WHERE name=?", (name,))
+                STORE.remove_machine(str(body.get("id") or name))
                 return self._json(200, admin_state())
             if action == "approve":
                 if not STORE.approve_machine(name):
@@ -648,23 +691,25 @@ class Handler(BaseHTTPRequestHandler):
 
 def overview():
     machines, names = [], {}
-    for n, ls, ag, cr, mid in STORE.q("SELECT name, last_seen, agent, created, mod_id FROM machines ORDER BY name"):
+    who = STORE.names()
+    by_name = lambda b: who.get(b, "a removed machine" if b else None)
+    for n, ls, ag, cr, mod in STORE.q("SELECT name, last_seen, agent, created, mod_id FROM machines ORDER BY name"):
         machines.append({"name": n, "last_seen": ls, "agent": ag, "created": cr})
-        if mid:
-            names[mid] = n
+        if mod:
+            names[mod] = n
     combos = {}
     for cid, rev, data, updated, by in STORE.q("SELECT id, rev, data, updated, by FROM combos"):
         c = json.loads(data)
         combos[cid] = {"id": cid, "name": c.get("name") or cid, "fighter": c.get("fighter") or "",
                        "hash": str(c.get("hash", c.get("version", "0"))), "steps": len(c.get("steps") or []),
-                       "notation": c.get("notation") or "", "updated": updated, "by": by, "profiles": []}
+                       "notation": c.get("notation") or "", "updated": updated, "by": by_name(by), "profiles": []}
     for cid, h, rev, samples, origins, updated, by in STORE.q(
             "SELECT id, hash, rev, samples, origins, updated, by FROM profiles"):
         e = combos.setdefault(cid, {"id": cid, "name": cid, "fighter": "", "hash": None, "steps": 0, "profiles": []})
         named = [names.get(o, "earlier data" if o == "legacy" else o) for o in json.loads(origins or "[]")]
         e["profiles"].append({"hash": h, "rev": rev, "samples": samples, "origins": sorted(set(named)),
-                              "updated": updated, "by": by, "current": h == e.get("hash")})
-    backups = [{"machine": m, "kind": k, "count": n}
+                              "updated": updated, "by": by_name(by), "current": h == e.get("hash")})
+    backups = [{"machine": by_name(m), "kind": k, "count": n}
                for m, k, n in STORE.q("SELECT machine, kind, COUNT(*) FROM backups GROUP BY machine, kind")]
     return {"version": HUB_VERSION, "machines": machines,
             "combos": sorted(combos.values(), key=lambda c: (c["fighter"], c["name"])), "backups": backups}
@@ -682,8 +727,8 @@ def admin_state():
                  for k, n, a, le in STORE.q("SELECT key, name, added, last_export FROM viewer_keys ORDER BY name")],
         "requests": [{"key": k, "name": n, "fingerprint": fp(k), "requested": r, "addr": ad}
                      for k, n, r, ad in STORE.q("SELECT key, name, requested, addr FROM key_requests ORDER BY requested DESC")],
-        "machines": [{"name": n, "last_seen": ls, "agent": ag, "created": cr, "addr": ad}
-                     for n, ls, ag, cr, ad in STORE.q("SELECT name, last_seen, agent, created, addr FROM machines ORDER BY name")],
+        "machines": [{"id": mid, "name": n, "last_seen": ls, "agent": ag, "created": cr, "addr": ad}
+                     for mid, n, ls, ag, cr, ad in STORE.q("SELECT id, name, last_seen, agent, created, addr FROM machines ORDER BY name")],
         "machine_requests": [{"name": n, "requested": r, "addr": ad}
                              for n, r, ad in STORE.q("SELECT name, requested, addr FROM machine_requests ORDER BY requested DESC")],
     }
@@ -694,7 +739,7 @@ def export_all():
         "exported": int(time.time()), "version": HUB_VERSION,
         "combos": {cid: json.loads(d) for cid, d in STORE.q("SELECT id, data FROM combos")},
         "profiles": [json.loads(d) for (d,) in STORE.q("SELECT data FROM profiles")],
-        "backups": [{"machine": m, "kind": k, "id": i, "data": json.loads(d)}
+        "backups": [{"machine": STORE.name_of(m) or m, "kind": k, "id": i, "data": json.loads(d)}
                     for m, k, i, d in STORE.q("SELECT machine, kind, id, data FROM backups")],
     }
 
@@ -754,7 +799,8 @@ def main():
             print("%-20s last seen %s  %s" % (n, time.strftime("%Y-%m-%d %H:%M", time.localtime(ls)) if ls else "never", ag or ""))
         return
     if a.command == "remove-machine":
-        STORE.q("DELETE FROM machines WHERE name=?", (a.name,))
+        if not STORE.remove_machine(a.name or ""):
+            sys.exit("No machine called %s." % a.name)
         print("Removed %s (its samples stay in the merged profiles)." % a.name)
         return
     if a.command == "export":

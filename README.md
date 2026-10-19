@@ -85,7 +85,7 @@ Server-side backups: `combolab_hub.py export <folder>` writes everything out as 
 
 The Hub tab also has:
 - **Sync now**;
-- **Rename** (the hub keeps this PC's samples under the new name);
+- **Rename:** each PC has a permanent hidden ID on the hub, and the name is only a label, so renaming changes nothing else;
 - **Change hub** and **Disconnect**;
 - connecting with a token from the admin page instead of asking to join.
 

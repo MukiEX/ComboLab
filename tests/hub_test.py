@@ -262,7 +262,11 @@ def test_join_from_page(url):
         h = wait(lambda h: h["status"].get("ok"))
         check(h["status"].get("ok") and h["status"].get("machine") == "pc-new", "approved PC syncs")
         code, h, _ = http(local, "/api/hub", {"action": "rename", "name": "pc-renamed"})
-        check(code == 200 and combolab_hub.STORE.machine_for(cfg["token"]) == "pc-renamed", "PC renamed itself")
+        mid = combolab_hub.STORE.machine_for(cfg["token"])
+        check(code == 200 and combolab_hub.STORE.name_of(mid) == "pc-renamed", "PC renamed itself")
+        check(mid and mid != "pc-renamed" and mid == combolab_hub.STORE.id_of("pc-renamed"), "its hidden id didn't change")
+        ov = combolab_hub.overview()
+        check(all("id" not in m for m in ov["machines"]), "ids aren't shown on the public overview")
         # another PC can't take that name
         root2 = tempfile.mkdtemp()
         combolab_server.ROOT = root2
@@ -275,6 +279,37 @@ def test_join_from_page(url):
     finally:
         combolab_server.SYNC.stop()
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_migration():
+    """A hub database from before 1.12 (machines keyed by name) gets hidden ids."""
+    import sqlite3
+    tmp = tempfile.mkdtemp()
+    try:
+        path = os.path.join(tmp, "hub.sqlite3")
+        db = sqlite3.connect(path)
+        db.executescript("""
+            CREATE TABLE machines (name TEXT PRIMARY KEY, token_sha TEXT UNIQUE, created INTEGER, last_seen INTEGER, agent TEXT, addr TEXT, mod_id TEXT);
+            CREATE TABLE combos (id TEXT PRIMARY KEY, rev INTEGER, sha TEXT, data TEXT, updated INTEGER, by TEXT);
+            CREATE TABLE profiles (id TEXT, hash TEXT, rev INTEGER, data TEXT, samples INTEGER, origins TEXT, updated INTEGER, by TEXT, PRIMARY KEY (id, hash));
+            CREATE TABLE backups (machine TEXT, kind TEXT, id TEXT, data TEXT, sha TEXT, updated INTEGER, PRIMARY KEY (machine, kind, id));
+        """)
+        db.execute("INSERT INTO machines (name, token_sha, created) VALUES ('old-pc', ?, 1)", (combolab_hub.token_hash("tok-old"),))
+        db.execute("INSERT INTO combos VALUES ('c1', 1, 'x', '{}', 1, 'old-pc')")
+        db.execute("INSERT INTO profiles VALUES ('c1', 'h', 2, '{}', 0, '[]', 1, 'old-pc')")
+        db.execute("INSERT INTO backups VALUES ('old-pc', 'sessions', 'c1', '{}', 'x', 1)")
+        db.commit(); db.close()
+        st = combolab_hub.Store(path)
+        mid = st.machine_for("tok-old")
+        check(mid and mid != "old-pc" and st.name_of(mid) == "old-pc", "old machine got a hidden id, kept its token")
+        check(st.q("SELECT by FROM combos")[0][0] == mid and st.q("SELECT by FROM profiles")[0][0] == mid
+              and st.q("SELECT machine FROM backups")[0][0] == mid, "records point at the id")
+        st.rename_machine(mid, "new-name")
+        check(st.q("SELECT by FROM combos")[0][0] == mid and st.machine_for("tok-old") == mid, "rename only changes the label")
+        combolab_hub.Store(path)   # opening again is a no-op
+        check(st.name_of(mid) == "new-name", "migration runs once")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def test_sshsig_vector():
@@ -373,6 +408,7 @@ def test_end_to_end():
 if __name__ == "__main__":
     test_merge_rules()
     test_sshsig_vector()
+    test_migration()
     test_lua_parity()
     test_end_to_end()
     print("hub OK" if not FAILS else "%d failures" % len(FAILS))
