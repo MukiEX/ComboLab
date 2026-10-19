@@ -151,6 +151,7 @@ local function frame()
 end
 
 for _ = 1, 120 do frame() end
+if os.getenv("DBG") then print("status:", FILES["ComboLab\\status.json"] and FILES["ComboLab\\status.json"].error, LOGLINES[#LOGLINES]) end
 FILES["ComboLab\\command.json"] = { seq = 2, cmd = "bot_start", ids = { "guile-test" }, options = { reps = 2 } }
 local n = 0
 repeat

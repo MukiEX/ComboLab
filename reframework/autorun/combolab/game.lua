@@ -210,7 +210,7 @@ end
 
 -- Move both fighters: positions are centre x in stage units (about +-730).
 local sfix_from = nil
-function Game.teleport(user_x, dummy_x)
+local function apply_tp(user_x, dummy_x)
     local cp = players()
     if not cp then return false end
     if not sfix_from then
@@ -223,6 +223,41 @@ function Game.teleport(user_x, dummy_x)
     up:POS_SETx(sfix_from:call(nil, user_x))
     op:POS_SETx(sfix_from:call(nil, dummy_x))
     return true
+end
+
+-- Moves both fighters. The game can put a position back on the next frame
+-- (Wael3rd's SF6_Teleport re-applies for the same reason), so teleport_tick()
+-- keeps re-applying for up to 15 frames until both are where they should be.
+Game.pending_tp = nil
+Game.tp_result = nil
+function Game.teleport(user_x, dummy_x)
+    local ok = apply_tp(user_x, dummy_x)
+    if ok then Game.pending_tp = { ux = user_x, dx = dummy_x, n = 0 } end
+    return ok
+end
+
+function Game.teleport_tick()
+    local p = Game.pending_tp
+    if not p then return end
+    local cp = players()
+    local up, op = cp and cp[Game.user], cp and cp[1 - Game.user]
+    local ux, ox
+    pcall(function() ux = up.pos.x.v / 65536.0; ox = op.pos.x.v / 65536.0 end)
+    if ux and ox and math.abs(ux - p.ux) < 0.5 and math.abs(ox - p.dx) < 0.5 then
+        Game.pending_tp, Game.tp_result = nil, "ok"
+        return
+    end
+    p.n = p.n + 1
+    if p.n > 15 then
+        -- the game may keep a fighter a little off the wall (collision box): close enough counts
+        if ux and ox and math.abs(ux - p.ux) < 40 and math.abs(ox - p.dx) < 40 then
+            Game.pending_tp, Game.tp_result = nil, "ok"
+        else
+            Game.pending_tp, Game.tp_result = nil, string.format("didn't stick: you at %.0f, dummy at %.0f, wanted %.0f / %.0f", ux or 0, ox or 0, p.ux, p.dx)
+        end
+        return
+    end
+    apply_tp(p.ux, p.dx)
 end
 Game.STAGE_EDGE = 47841280 / 65536.0
 

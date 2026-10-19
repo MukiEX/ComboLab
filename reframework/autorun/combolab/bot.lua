@@ -568,7 +568,21 @@ function Bot:update()
         end
     elseif self.state == "settle" then
         if now - self.settle_t == 2 then self:do_teleport() end
+        -- don't start until the fighters really are in place
+        local pending, result = nil, nil
+        if self.env.tp_status then pending, result = self.env.tp_status() end
+        if now - self.settle_t >= 24 and (pending or (result and result ~= "ok")) then
+            self.tp_tries = (self.tp_tries or 0) + 1
+            if self.tp_tries > 3 then
+                self.tp_tries = 0
+                return self:fail_combo("couldn't move the fighters into position (" .. tostring(result or "teleport pending") .. ")")
+            end
+            self:do_teleport()
+            self.settle_t = now - 4
+            return
+        end
         if now - self.settle_t >= 24 then
+            self.tp_tries = 0
             self.state = "run"
             self.events, self.press, self.anchor = {}, {}, {}
             local c = self.cur

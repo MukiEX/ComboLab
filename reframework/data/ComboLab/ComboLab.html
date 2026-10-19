@@ -230,6 +230,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
         <label class="switch"><input type="checkbox" id="optRhythm" checked> Rhythm guide <span class="muted">(Train)</span></label>
         <label class="switch"><input type="checkbox" id="optDemo" checked> Cadence preview</label>
         <label class="switch"><input type="checkbox" id="optPredict" checked> Predict windows from frame data</label>
+        <label class="switch"><input type="checkbox" id="optPlace" checked> Corner combos: place fighters in the corner</label>
         <label class="switch"><input type="checkbox" id="optLearn"> Keep learning in Train</label>
         <label class="switch"><input type="checkbox" id="optDetail"> Detail table</label>
         <label class="switch"><input type="checkbox" id="optIgnoreSpam" checked> Ignore spammed samples</label>
@@ -412,7 +413,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.11.0";
+const PAGE_VERSION = "1.12.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -888,7 +889,7 @@ function optionsFromForm() {
     spam_block: $("optSpam").checked, learn_in_train: $("optLearn").checked, show_detail: $("optDetail").checked,
     ignore_spam_samples: $("optIgnoreSpam").checked, user_side: $("optP2").checked ? 1 : 0,
     scale: +$("optScale").value, y: +$("optY").value,
-    rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked, predict: $("optPredict").checked,
+    rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked, predict: $("optPredict").checked, auto_place: $("optPlace").checked,
     train_view: $("optView").value, note_approach: +$("optApproach").value, note_flip: $("optFlip").checked, note_palette: $("optPalette").value, fix_pos: $("optFixPos").value,
     motion_arrows: $("optArrows").checked,
     song_mode: $("optSong").checked, song_follow: $("optFollow").checked, song_approach: +$("optSongApproach").value, song_beat: +$("optSongBeat").value,
@@ -900,7 +901,7 @@ function optionsToForm(o) {
   $("optSpam").checked = !!o.spam_block; $("optLearn").checked = !!o.learn_in_train;
   $("optDetail").checked = !!o.show_detail; $("optIgnoreSpam").checked = o.ignore_spam_samples !== false;
   $("optP2").checked = o.user_side === 1;
-  $("optRhythm").checked = o.rhythm !== false; $("optDemo").checked = o.rhythm_demo !== false; $("optPredict").checked = o.predict !== false;
+  $("optRhythm").checked = o.rhythm !== false; $("optDemo").checked = o.rhythm_demo !== false; $("optPredict").checked = o.predict !== false; $("optPlace").checked = o.auto_place !== false;
   if (o.train_view) $("optView").value = o.train_view;
   if (o.note_approach) $("optApproach").value = o.note_approach;
   $("optFlip").checked = !!o.note_flip;

@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.11.0"
+local VERSION = "1.12.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -51,6 +51,8 @@ local DEFAULTS = {
     timeout = 90,
     use_hook = true,
     predict = true,            -- predict windows from the game's frame data
+    auto_place = true,         -- corner combos: put both fighters in the corner between attempts
+    place_spacing = 0,         -- extra distance between the fighters when placing
     pred_cal = {},             -- measured-vs-predicted edge offsets, per combo step           -- false = safe mode (no game hook; restart the game after changing)
     last_cmd_seq = 0,
     keys = { mode = 0x74, next = 0x75, detail = 0x76, spam = 0x77, overlay = 0x78, bot = 0x79, view = 0x7A }, -- F5..F11
@@ -159,6 +161,8 @@ local function scan_combos()
     end
 end
 
+local place = { idle = 0, done = false }    -- fighter placement state (see placement_tick)
+
 local function profile_path(id) return DIR .. "profiles\\" .. id .. ".json" end
 local function session_path(id) return DIR .. "sessions\\" .. id .. ".json" end
 
@@ -191,6 +195,7 @@ local function load_combo(id)
             S.last = nil
             load_session(c.id)
             facts_wanted = true
+            place.done, place.idle = false, 0
             cfg.combo_id = c.id
             save_cfg()
             if reset then flash("Combo changed since its profile was recorded: profile reset")
@@ -364,6 +369,7 @@ S.bot = Bot.new({
     end,
     tracker = S.tracker,
     teleport = function(ux, dx) return Game.teleport(ux, dx) end,
+    tp_status = function() return Game.pending_tp ~= nil, Game.tp_result end,
     edge = Game.STAGE_EDGE,
     fighter_id = function() return fighter_id end,
     report = function(id, r) json.dump_file(DIR .. "bot\\" .. id .. ".json", r) end,
@@ -394,7 +400,7 @@ local last_poll, last_status = 0, 0
 
 local function apply_options(o)
     if type(o) ~= "table" then return end
-    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows", "predict" }) do
+    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows", "predict", "auto_place" }) do
         if o[k] ~= nil then cfg[k] = o[k] == true end
     end
     Profile.PREDICT = cfg.predict ~= false
@@ -408,6 +414,7 @@ local function apply_options(o)
     if tonumber(o.song_beat) then cfg.song_beat = math.max(12, math.min(90, math.floor(tonumber(o.song_beat)))) end
     if o.note_palette == "classic" or o.note_palette == "sf6" then cfg.note_palette = o.note_palette end
     if tonumber(o.note_approach) then cfg.note_approach = math.max(12, math.min(90, math.floor(tonumber(o.note_approach)))) end
+    if tonumber(o.place_spacing) then cfg.place_spacing = math.max(0, math.min(200, tonumber(o.place_spacing))) end
     for _, k in ipairs({ "scale", "y", "result_seconds", "timeout" }) do
         if tonumber(o[k]) then cfg[k] = tonumber(o[k]) end
     end
@@ -450,6 +457,8 @@ local function handle_command(c)
         bot_start(ids, c.options)
     elseif cmd == "bot_stop" then
         S.bot:stop("stopped from the web page")
+    elseif cmd == "place" then
+        place_fighters(c.position == "mid" and "mid" or "corner")
     elseif cmd == "rescan" then
         scan_combos()
         if S.combo then load_combo(S.combo.id) end
@@ -489,7 +498,7 @@ local function write_status()
             user_side = cfg.user_side, overlay = cfg.overlay, enabled = cfg.enabled,
             rhythm = cfg.rhythm, rhythm_demo = cfg.rhythm_demo,
             train_view = cfg.train_view, note_approach = cfg.note_approach, note_flip = cfg.note_flip, note_palette = cfg.note_palette, fix_pos = cfg.fix_pos,
-            motion_arrows = cfg.motion_arrows, predict = cfg.predict,
+            motion_arrows = cfg.motion_arrows, predict = cfg.predict, auto_place = cfg.auto_place, place_spacing = cfg.place_spacing,
             song_mode = cfg.song_mode, song_follow = cfg.song_follow, song_approach = cfg.song_approach, song_beat = cfg.song_beat,
         },
         bot = S.bot:status(),
@@ -605,6 +614,43 @@ local function sync_tick()
     end
 end
 
+-- ---------------------------------------------------------------- placement
+-- Corner combos (name says "corner"): put both fighters in the corner when the
+-- combo loads and again between attempts, once you've been idle for a moment.
+-- The corner is the one you're facing, so it works from either side.
+local function wants_corner(c)
+    return c and ((tostring(c.name or "") .. " " .. tostring(c.id or "")):lower():find("corner")) ~= nil
+end
+
+local function place_fighters(pos)
+    local edge = Game.STAGE_EDGE
+    local dist = 30 + (tonumber(cfg.place_spacing) or 0)
+    local ux, dx
+    if pos == "corner" then dx = edge - 1; ux = dx - dist else ux, dx = -dist / 2, dist / 2 end
+    local d = Game.diag
+    if d and d.u and d.o and d.u.x and d.o.x and d.u.x > d.o.x then ux, dx = -ux, -dx end
+    return Game.teleport(ux, dx), ux, dx
+end
+
+local function placement_tick()
+    if not cfg.auto_place or S.bot.running or not in_training or not wants_corner(S.combo) then return end
+    if S.tracker.att then place.idle, place.done = 0, false return end
+    local d = Game.diag
+    if not d or not d.u or not d.o then return end
+    if (d.u.held or 0) == 0 and (d.u.dir or 5) == 5 and (d.o.stun or 0) == 0 and (d.o.hitstop or 0) == 0 then
+        place.idle = place.idle + 1
+    else
+        place.idle = 0
+    end
+    if place.idle >= 45 and not place.done then
+        place.done = true
+        local edge = Game.STAGE_EDGE
+        local dist = 30 + (tonumber(cfg.place_spacing) or 0)
+        local in_corner = math.abs(math.abs(d.o.x or 0) - (edge - 1)) < 8 and math.abs(math.abs((d.u.x or 0) - (d.o.x or 0)) - dist) < 8
+        if not in_corner then place_fighters("corner") end
+    end
+end
+
 local training_check = 0
 scan_combos()
 if cfg.combo_id then load_combo(cfg.combo_id) end
@@ -655,6 +701,8 @@ re.on_frame(function()
         local ok, err = pcall(poll_commands)
         if not ok then last_error = tostring(err) end
     end
+    Game.teleport_tick()
+    pcall(placement_tick)
     if facts_wanted and in_training and fighter_id and S.profile then
         facts_wanted = false
         local ok, err = pcall(refresh_facts)
@@ -738,6 +786,16 @@ re.on_draw_ui(function()
     if changed then cfg.note_flip = v; save_cfg() end
     changed, v = imgui.checkbox("Safe mode: no game hook (restart game to apply)", cfg.use_hook == false)
     if changed then cfg.use_hook = not v; save_cfg() end
+    changed, v = imgui.checkbox("Corner combos: put both fighters in the corner between attempts", cfg.auto_place ~= false)
+    if changed then cfg.auto_place = v; place.done = false; save_cfg() end
+    if imgui.button("Place fighters in the corner now") then place_fighters("corner") end
+    imgui.same_line()
+    if imgui.button("Midscreen now") then place_fighters("mid") end
+    if Game.tp_result and Game.tp_result ~= "ok" then imgui.text("last placement: " .. Game.tp_result) end
+    if imgui.slider_int then
+        changed, v = imgui.slider_int("Placement spacing", math.floor(tonumber(cfg.place_spacing) or 0), 0, 200)
+        if changed then cfg.place_spacing = v; save_cfg() end
+    end
     changed, v = imgui.checkbox("Predict windows from game frame data", cfg.predict ~= false)
     if changed then cfg.predict = v; Profile.PREDICT = v; save_cfg(); if S.profile then S.profile._win = {} end end
     changed, v = imgui.checkbox("Rhythm guide (Train)", cfg.rhythm ~= false); if changed then cfg.rhythm = v; save_cfg() end
