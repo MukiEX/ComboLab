@@ -266,6 +266,7 @@ local td_cPlayer = sdk.find_type_definition("nBattle.cPlayer")
 local m_input = td_cPlayer and td_cPlayer:get_method("pl_input_sub")
 Game.hook_ok = m_input ~= nil and not _G.COMBOLAB_NO_HOOK
 local hook_this = {}
+Game.hook_ticks = 0
 if Game.hook_ok then
     sdk.hook(m_input,
         function(args)
@@ -286,6 +287,7 @@ if Game.hook_ok then
                 end
                 if addr and addr == addr_cache[Game.user] then
                     last_hook_clock = os.clock()
+                    Game.hook_ticks = Game.hook_ticks + 1     -- real battle frames only (speed test)
                     inject(players()[Game.user])
                     emit("hook")
                 end

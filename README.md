@@ -138,6 +138,8 @@ The bot plays combos for you in Training mode and sweeps each step's press timin
 
 Position comes from the combo name ("corner" in the name means corner) unless you override it. Before each attempt the bot checks that both fighters actually ended up in place: it re-applies the move for a few frames if the game puts them back, and stops that combo with a reason if they still aren't there. Results, including why a combo failed, show in the web page and are saved to `reframework/data/ComboLab/bot/<id>.json`.
 
+**Research speed** (experimental): runs the battle faster than real time while the bot works. Everything is counted in game frames, so the windows come out the same, just sooner. Click **Test speed settings** once (Training mode, a combo loaded, hands off for about 15 seconds): it tries each speed setting it can find (RE Engine's global game speed and any "speed" value in Training's settings) at 2x and keeps only one that really runs more frames per second, not one that just speeds up animations. Then pick 1.5x–4x on the Research bot card. The speed only applies while the bot runs and goes back to normal as soon as it stops. The REFramework menu has the same under ComboLab > Research speed, with the frames per second it's getting.
+
 **Speed:** each attempt takes about 4–6 seconds (most of it waiting for the dummy to get up). A 4-step combo takes around 100 attempts at 2 repeats, about 8 minutes; long combos take longer. Use 1 repeat and turn off the sweet-spot pass for a quick first pass.
 
 **Not supported yet:** jump-in starters (j.X as the first step) and Modern controls; those are skipped with a reason. Charge moves hold the charge direction automatically, which can turn a neutral normal right before them into a crouching one.

@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.14.0"
+local VERSION = "1.15.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -18,6 +18,7 @@ local Overlay = require("combolab.overlay")
 local Bot = require("combolab.bot")
 local MoveData = require("combolab.movedata")
 local Predict = require("combolab.predict")
+local Speed = require("combolab.speed")
 
 local DIR = "ComboLab\\"
 local CFG_PATH = DIR .. "config.json"
@@ -53,6 +54,8 @@ local DEFAULTS = {
     predict = true,            -- predict windows from the game's frame data
     auto_place = true,         -- corner combos: put both fighters in the corner between attempts
     place_spacing = 0,         -- extra distance between the fighters when placing
+    research_speed = 1,        -- research bot: run the battle this many times faster (needs a passing speed test)
+    speed_key = nil,           -- which speed setting to use (nil: the best one the test found)
     pred_cal = {},             -- measured-vs-predicted edge offsets, per combo step           -- false = safe mode (no game hook; restart the game after changing)
     last_cmd_seq = 0,
     keys = { mode = 0x74, next = 0x75, detail = 0x76, spam = 0x77, overlay = 0x78, bot = 0x79, view = 0x7A }, -- F5..F11
@@ -384,11 +387,23 @@ S.bot = Bot.new({
 Game.injector = function(t) return S.bot:frame_mask(t) end
 Game.observer = function(smp) S.bot:observe(smp) end
 
+local function speed_up_for_bot(opts)
+    local mult = tonumber(opts and opts.speed) or tonumber(cfg.research_speed) or 1
+    if mult <= 1.001 then return end
+    local key = cfg.speed_key or Speed.best()
+    if not key then flash("Research speed: run the speed test first (bot runs at normal speed)") return end
+    local ok, why = Speed.apply(key, mult)
+    if ok then flash(string.format("Research speed %.1fx", mult))
+    else flash("Research speed: " .. tostring(why)) end
+end
+
 local function bot_start(ids, opts)
     if not in_training then flash("Bot: go into Training mode first") return end
     if not Game.hook_ok then flash("Bot needs the game hook (turn safe mode off and restart)") return end
     if type(ids) ~= "table" or #ids == 0 then flash("Bot: nothing to profile") return end
+    if Speed.test then flash("Bot: wait for the speed test to finish") return end
     S.bot:start(ids, opts or {})
+    if S.bot.running then speed_up_for_bot(opts) end
     status_dirty = true
 end
 
@@ -463,6 +478,17 @@ local function handle_command(c)
         bot_start(ids, c.options)
     elseif cmd == "bot_stop" then
         S.bot:stop("stopped from the web page")
+    elseif cmd == "speed_test" then
+        if not in_training or not Game.hook_ok or not S.combo or not cfg.enabled then flash("Speed test: go into Training mode with a combo loaded first")
+        elseif S.bot.running then flash("Speed test: stop the bot first")
+        else
+            Speed.start_test(function() return Game.hook_ticks end, tonumber(c.mult) or 2)
+            flash("Testing research speed: hands off for ~15 s")
+        end
+    elseif cmd == "speed_settings" then
+        if tonumber(c.research_speed) then cfg.research_speed = math.max(1, math.min(8, tonumber(c.research_speed))) end
+        if c.speed_key ~= nil then cfg.speed_key = (c.speed_key ~= "" and c.speed_key ~= false) and tostring(c.speed_key) or nil end
+        save_cfg()
     elseif cmd == "place" then
         place_fighters(c.position == "mid" and "mid" or "corner")
     elseif cmd == "rescan" then
@@ -508,6 +534,7 @@ local function write_status()
             song_mode = cfg.song_mode, song_follow = cfg.song_follow, song_approach = cfg.song_approach, song_beat = cfg.song_beat,
         },
         bot = S.bot:status(),
+        speed = (function() local t = Speed.status(); t.research_speed = cfg.research_speed; t.speed_key = cfg.speed_key; return t end)(),
         error = last_error or Game.last_error,
     }
     json.dump_file(DIR .. "status.json", st, 2)
@@ -659,6 +686,7 @@ local function placement_tick()
     end
 end
 
+if type(cfg.speed_results) == "table" then Speed.results = cfg.speed_results; Speed.base_fps = cfg.speed_base end
 local training_check = 0
 scan_combos()
 if cfg.combo_id then load_combo(cfg.combo_id) end
@@ -689,6 +717,22 @@ re.on_frame(function()
         end
     end
     if S.bot.running and not in_training then S.bot:stop("left Training mode") end
+    -- research speed: test runs, and never stays on without the bot
+    Speed.sample(Game.hook_ticks)
+    if Speed.test then
+        if not in_training or Game.paused() then Speed.test = nil; Speed.restore(); Speed.error = "test stopped (left Training or paused)" end
+        Speed.update()
+        status_dirty = true
+        if not Speed.test then
+            -- remember what worked, across restarts
+            cfg.speed_results, cfg.speed_base = Speed.results, Speed.base_fps
+            save_cfg()
+            local b = Speed.best()
+            flash(b and string.format("Speed test: %.1fx works (%s)", Speed.results[b].ratio, b) or ("Speed test: " .. (Speed.error or "no setting gave extra frames")))
+        end
+    elseif Speed.active and not S.bot.running then
+        Speed.restore()
+    end
     if S.bot.running and Game.source ~= "hook" and Game.tick > 0 and Game.source ~= "none" then
         S.bot:stop("the game hook isn't running")
     end
@@ -832,6 +876,23 @@ re.on_draw_ui(function()
             if S.bot.stop_reason then imgui.text("last run: " .. tostring(S.bot.stop_reason)) end
         end
         imgui.text("Set dummy to no guard, gauges to infinite/refill. Hands off the controller while it runs.")
+        imgui.tree_pop()
+    end
+    if imgui.tree_node("Research speed") then
+        imgui.text("Runs the battle faster while the research bot works (frames are counted, so windows stay exact).")
+        if Speed.test then imgui.text("Testing... hands off")
+        elseif imgui.button("Test speed settings (about 15 s, Training mode)") then
+            handle_command({ cmd = "speed_test", mult = 2 })
+        end
+        local st = Speed.status()
+        if st.base_fps then imgui.text(string.format("normal: %.1f frames/s", st.base_fps)) end
+        for key, r in pairs(Speed.results or {}) do
+            imgui.text(string.format("  %s: %s", key, type(r) == "table" and (r.note or "") or "?"))
+        end
+        if st.error then imgui.text_colored(st.error, 0xFF5555FF) end
+        local ch, v = imgui.slider_float("Research speed (x)", cfg.research_speed or 1, 1, 4)
+        if ch then cfg.research_speed = math.floor(v * 4 + 0.5) / 4; save_cfg() end
+        if st.fps then imgui.text(string.format("battle now: %.1f frames/s%s", st.fps, Speed.active and string.format("  (%.2gx on)", Speed.active.mult) or "")) end
         imgui.tree_pop()
     end
     if imgui.tree_node("Diagnostics") then

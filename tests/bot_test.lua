@@ -136,6 +136,7 @@ local clock = 0
 os.clock = function() return clock end
 local DIRS = { [0] = 5, [1] = 8, [2] = 2, [4] = 4, [8] = 6, [5] = 7, [6] = 1, [9] = 9, [10] = 3 }
 
+MULTI = tonumber(os.getenv("BOT_MULTI") or "1")
 local function frame()
     P0.pl_input_new, P0.pl_sw_new = 0, 0           -- nobody touches the real pad
     P1.damage_time, P1.guard_time = E.opp_stun, E.guard
@@ -147,7 +148,9 @@ local function frame()
     local raw = P0.pl_input_new & 15
     Toy.engine_step(E, P0.pl_sw_new & ~15, DIRS[raw] or 5)
     clock = clock + 1 / 60
-    on_frame()
+    -- BOT_MULTI=n: n battle frames per rendered frame (research speed)
+    FRAMES = (FRAMES or 0) + 1
+    if FRAMES % MULTI == 0 then on_frame() end
 end
 
 for _ = 1, 120 do frame() end

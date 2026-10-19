@@ -589,9 +589,11 @@ function Bot:update()
             self:do_teleport()
             self.state = "settle"
             self.settle_t = now
+            self.retp = false
         end
     elseif self.state == "settle" then
-        if now - self.settle_t == 2 then self:do_teleport() end
+        -- (>= and a flag: at research speed several frames can pass per update)
+        if not self.retp and now - self.settle_t >= 2 then self.retp = true; self:do_teleport() end
         -- don't start until the fighters really are in place
         local pending, result = nil, nil
         if self.env.tp_status then pending, result = self.env.tp_status() end
