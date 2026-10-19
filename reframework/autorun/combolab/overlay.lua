@@ -444,6 +444,7 @@ function Overlay.song_update(S, live, now)
         if live or (S.result_age or 99) < 1.0 then S.song = nil return end
         local B = math.max(12, cfg.song_beat or 30)
         song = { t0 = now, B = B, T = {} }
+        S.song_seq = (S.song_seq or 0) + 1        -- a new count-in (ComboLab.lua may re-place the fighters)
         song.T[1] = now + 4 * B
         local prev_dq = 1
         for k = 2, N do

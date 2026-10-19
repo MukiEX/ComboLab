@@ -240,6 +240,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
           <label class="switch"><input type="checkbox" id="optPlace" checked> Corner combos: place fighters in the corner</label>
           <label class="switch"><input type="checkbox" id="optDetail"> Detail table in game</label>
           <label class="switch"><input type="checkbox" id="optIgnoreSpam" checked> Ignore spammed samples</label>
+          <label class="switch"><input type="checkbox" id="optAutoDummy" checked> Set the dummy for each combo <span class="muted">(counter hit, stance; no guard while the bot runs)</span></label>
         </div>
       </section>
 
@@ -308,6 +309,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
           </div>
           <div class="row" style="margin-top:12px;gap:22px;align-items:flex-end">
             <label class="switch"><input type="checkbox" id="optFollow"> Song: follow my hits</label>
+            <label class="switch"><input type="checkbox" id="optSongPlace"> Song: put the fighters back in place at each count-in</label>
             <label class="f">Song note flight <input type="range" id="optSongApproach" min="40" max="150" step="5" value="80"></label>
             <label class="f">Count-in beat <input type="range" id="optSongBeat" min="15" max="60" step="1" value="30"></label>
           </div>
@@ -366,6 +368,11 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
     </div>
     <div class="chips" id="chips"></div>
     <div id="override"></div>
+    <div class="row" style="margin-top:14px;gap:14px;align-items:flex-end">
+      <label class="f">Dummy counter <select id="edCounter"><option value="auto">Auto (DI starter / name)</option><option value="normal">Normal hit</option><option value="ch">Counter hit</option><option value="pc">Punish counter</option></select></label>
+      <label class="f">Dummy stance <select id="edStance"><option value="auto">Auto (name)</option><option value="stand">Standing</option><option value="crouch">Crouching</option></select></label>
+      <span class="muted" style="font-size:12px;margin-bottom:6px">Set in game when the combo loads (Profiling tab option).</span>
+    </div>
     <label class="switch" style="margin-top:14px"><input type="checkbox" id="edExperimental"> Experimental <span class="muted">(not confirmed to work yet; verified automatically after its first clean run)</span></label>
     <div class="row" style="margin-top:16px">
       <button class="btn primary" id="btnSave">Save</button>
@@ -524,7 +531,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.18.0";
+const PAGE_VERSION = "1.19.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -984,6 +991,25 @@ function renderHeaderStatus() {
 }
 
 /* ===================== selected combo (Combo Training) ===================== */
+// mirrors Dummy.wants() in the mod
+function dummyWants(c) {
+  const d = (c && c.dummy) || {};
+  const name = " " + String(c && c.name || "").toLowerCase().replace(/[()\[\]:,/]/g, " ") + " ";
+  let counter = d.counter && d.counter !== "auto" ? d.counter : null;
+  if (!counter) {
+    const s1 = arr(c && c.steps)[0];
+    if (s1 && String(s1.label).toUpperCase() === "DI") counter = "pc";
+    else if (/\spc\s|punish.counter/.test(name)) counter = "pc";
+    else if (/\sch\s|counter hit|\scounter\s/.test(name)) counter = "ch";
+    else counter = "normal";
+  }
+  let stance = d.stance && d.stance !== "auto" ? d.stance : (/crouch|\svs cr/.test(name) ? "crouch" : "stand");
+  return {counter, stance};
+}
+function dummyText(c) {
+  const w = dummyWants(c);
+  return ({normal: "normal hit", ch: "counter hit", pc: "punish counter"}[w.counter]) + ", " + (w.stance === "crouch" ? "crouching" : "standing");
+}
 function renderComboHead() {
   const c = st.sel && st.combos[st.sel];
   if (!c) {
@@ -995,7 +1021,7 @@ function renderComboHead() {
   }
   $("ctTitle").textContent = c.name || c.id;
   const ingame = st.status && st.status.combo_id === c.id;
-  $("ctSub").innerHTML = `${esc(FIGHTERS[c.fighter_id] || c.fighter || "")} · ${c.control === "modern" ? "Modern" : "Classic"}${c.experimental ? ` · <span class="exptag">experimental</span>` : ""}${ingame ? ` · <span style="color:var(--good)">loaded in game (${st.status.mode === "train" ? "Training" : "Profiling"})</span>` : ""}`;
+  $("ctSub").innerHTML = `${esc(FIGHTERS[c.fighter_id] || c.fighter || "")} · ${c.control === "modern" ? "Modern" : "Classic"}${c.experimental ? ` · <span class="exptag">experimental</span>` : ""}${ingame ? ` · <span style="color:var(--good)">loaded in game (${st.status.mode === "train" ? "Training" : "Profiling"})</span>` : ""} · dummy: ${esc(dummyText(c))}`;
   const win = st.profile && arr(st.profile.windows);
   $("selChips").innerHTML = arr(c.steps).map((s, i) => {
     const sep = i === 0 ? "" : `<span class="sep">${s.sep === "," ? "," : s.sep === "~" ? "~" : "&gt;"}</span>`;
@@ -1042,6 +1068,8 @@ function loadDraftIntoForm() {
   $("name").value = d.name;
   $("notation").value = d.notation;
   $("edExperimental").checked = !!d.experimental;
+  $("edCounter").value = (d.dummy && d.dummy.counter) || "auto";
+  $("edStance").value = (d.dummy && d.dummy.stance) || "auto";
   $("edTitle").textContent = d.id ? "Edit combo" : "New combo";
   $("btnDelete").hidden = !d.id;
   $("saveMsg").textContent = "";
@@ -1056,11 +1084,12 @@ function readForm() {
   d.name = $("name").value.trim();
   d.notation = $("notation").value;
   d.experimental = $("edExperimental").checked;
+  d.dummy = {counter: $("edCounter").value, stance: $("edStance").value};
 }
 
 function openEditor(id) {
   const c = id && st.combos[id];
-  st.draft = c ? {id: c.id, name: c.name || "", fighter_id: c.fighter_id || 18, control: c.control || "classic", notation: c.notation || "", overrides: JSON.parse(JSON.stringify(c.overrides || {})), version: c.version, experimental: !!c.experimental}
+  st.draft = c ? {id: c.id, name: c.name || "", fighter_id: c.fighter_id || 18, control: c.control || "classic", notation: c.notation || "", overrides: JSON.parse(JSON.stringify(c.overrides || {})), version: c.version, experimental: !!c.experimental, dummy: c.dummy}
                : newDraft(st.dbFighter || st.trainFighter);
   $("importCard").classList.add("hidden");
   $("editor").classList.remove("hidden");
@@ -1138,6 +1167,7 @@ async function saveDraft() {
     steps: steps.map(s => ({label: s.label, sep: s.sep, kind: s.kind, trigger: s.trigger})),
     overrides: d.overrides, experimental: !!d.experimental, updated: new Date().toISOString(),
   };
+  if (d.dummy && (d.dummy.counter !== "auto" || d.dummy.stance !== "auto")) combo.dummy = d.dummy;
   if (prev && prev.verified && !combo.experimental) combo.verified = prev.verified;
   if (prev && prev.bot) combo.bot = prev.bot;
   if (!FS.ok) { $("saveMsg").textContent = "Not linked to a folder: use Export JSON."; return null; }
@@ -1177,6 +1207,7 @@ function optionsFromForm() {
     rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked, predict: $("optPredict").checked, auto_place: $("optPlace").checked,
     train_view: $("optView").value, note_approach: +$("optApproach").value, note_flip: $("optFlip").checked, note_palette: $("optPalette").value, fix_pos: $("optFixPos").value,
     motion_arrows: $("optArrows").checked,
+    auto_dummy: $("optAutoDummy").checked, song_place: $("optSongPlace").checked,
     song_mode: $("optSong").checked, song_follow: $("optFollow").checked, song_approach: +$("optSongApproach").value, song_beat: +$("optSongBeat").value,
   };
 }
@@ -1195,6 +1226,7 @@ function optionsToForm(o) {
   if (o.fix_pos) $("optFixPos").value = o.fix_pos;
   if (o.song_mode != null) $("optSong").checked = !!o.song_mode;
   $("optFollow").checked = !!o.song_follow;
+  $("optAutoDummy").checked = o.auto_dummy !== false; $("optSongPlace").checked = !!o.song_place;
   if (o.song_approach) $("optSongApproach").value = o.song_approach;
   if (o.song_beat) $("optSongBeat").value = o.song_beat;
   if (o.scale) $("optScale").value = o.scale;

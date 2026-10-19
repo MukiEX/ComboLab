@@ -148,7 +148,18 @@ Position comes from the combo name ("corner" in the name means corner) unless yo
 
 **Not supported yet:** Modern controls; those combos are skipped with a reason. Charge moves hold the charge direction automatically, which can turn a neutral normal right before them into a crouching one.
 
+## Dummy settings per combo
+
+With **Set the dummy for each combo** on (Profiling tab, on by default), loading a combo in Training sets the dummy the way the combo needs it, through the same settings as Training's menu:
+- **Counter:** Punish Counter for a combo that starts with Drive Impact (a DI only crumples on a punish counter, and the Punish Counter setting makes every hit one), or with "PC" / "punish counter" in its name; Counter Hit with "CH" / "counter" in the name; otherwise normal hits.
+- **Stance:** crouching with "crouch" in the name, otherwise standing.
+- **Guard:** off while the research bot runs, then back to what you had.
+
+Each combo can override both in Combo Database (Edit > Dummy counter / Dummy stance). The combo header shows what the dummy is set to. Turning the option off puts your own settings back. The field names come from Wael3rd's SF6_Tools (MIT).
+
 ## Fighter placement for your own practice
+
+**Song mode** can put the fighters back in place at every count-in (Training tab > Overlay and notes > *Song: put the fighters back in place at each count-in*): midscreen, or the corner for corner combos.
 
 Corner combos (any with "corner" in the name) put both fighters in the corner you're facing when the combo loads, and again between attempts once you've been idle for about a second. Turn it off with **Corner combos: place fighters in the corner** on the Profiling tab. The REFramework menu has **Place fighters in the corner now** / **Midscreen now** buttons and a spacing slider. SF6's own option works too: hold left or right while pressing the reset-position button in Training.
 

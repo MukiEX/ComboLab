@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.18.0"
+local VERSION = "1.19.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -19,6 +19,7 @@ local Bot = require("combolab.bot")
 local MoveData = require("combolab.movedata")
 local Predict = require("combolab.predict")
 local Speed = require("combolab.speed")
+local Dummy = require("combolab.dummy")
 
 local DIR = "ComboLab\\"
 local CFG_PATH = DIR .. "config.json"
@@ -54,6 +55,8 @@ local DEFAULTS = {
     predict = true,            -- predict windows from the game's frame data
     auto_place = true,         -- corner combos: put both fighters in the corner between attempts
     place_spacing = 0,         -- extra distance between the fighters when placing
+    auto_dummy = true,         -- set the dummy (counter hit, stance) for each combo; no guard while the bot runs
+    song_place = false,        -- song mode: put the fighters back in place at every count-in
     research_speed = 1,        -- research bot: run the battle this many times faster (needs a passing speed test)
     speed_key = nil,           -- which speed setting to use (nil: the best one the test found)
     pred_cal = {},             -- measured-vs-predicted edge offsets, per combo step           -- false = safe mode (no game hook; restart the game after changing)
@@ -204,6 +207,10 @@ local function load_combo(id)
             S.last = nil
             load_session(c.id)
             facts_wanted = true
+            if cfg.auto_dummy and in_training then
+                local ok, msg = pcall(Dummy.setup, c, { no_guard = S.bot and S.bot.running })
+                if ok then L("%s", msg) end
+            end
             place.done, place.idle = false, 0
             cfg.combo_id = c.id
             save_cfg()
@@ -424,9 +431,12 @@ local last_poll, last_status = 0, 0
 
 local function apply_options(o)
     if type(o) ~= "table" then return end
-    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows", "predict", "auto_place" }) do
+    local was_auto_dummy = cfg.auto_dummy
+    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows", "predict", "auto_place", "auto_dummy", "song_place" }) do
         if o[k] ~= nil then cfg[k] = o[k] == true end
     end
+    if was_auto_dummy and not cfg.auto_dummy then pcall(Dummy.restore) end
+    if cfg.auto_dummy and not was_auto_dummy and S.combo and in_training then pcall(Dummy.setup, S.combo, {}) end
     Profile.PREDICT = cfg.predict ~= false
     if S.profile then S.profile._win = {} end
     if o.train_view == "bar" or o.train_view == "notes" or o.train_view == "both" or o.train_view == "fix" then cfg.train_view = o.train_view end
@@ -551,9 +561,16 @@ local function write_status()
             rhythm = cfg.rhythm, rhythm_demo = cfg.rhythm_demo,
             train_view = cfg.train_view, note_approach = cfg.note_approach, note_flip = cfg.note_flip, note_palette = cfg.note_palette, fix_pos = cfg.fix_pos,
             motion_arrows = cfg.motion_arrows, predict = cfg.predict, auto_place = cfg.auto_place, place_spacing = cfg.place_spacing,
+            auto_dummy = cfg.auto_dummy, song_place = cfg.song_place,
             song_mode = cfg.song_mode, song_follow = cfg.song_follow, song_approach = cfg.song_approach, song_beat = cfg.song_beat,
         },
         bot = S.bot:status(),
+        dummy = in_training and (function()
+            local ok, d = pcall(Dummy.status)
+            if not ok then return nil end
+            if S.combo then local w = Dummy.wants(S.combo); d.wants = { counter = w.counter_name, stance = w.stance } end
+            return d
+        end)() or nil,
         speed = (function() local t = Speed.status(); t.research_speed = cfg.research_speed; t.speed_key = cfg.speed_key; return t end)(),
         error = last_error or Game.last_error,
     }
@@ -719,7 +736,11 @@ re.on_frame(function()
     training_check = training_check - 1
     if training_check <= 0 then
         training_check = 60
+        local was_training = in_training
         in_training = Game.in_training()
+        if in_training and not was_training and S.combo and cfg.auto_dummy then
+            pcall(Dummy.setup, S.combo, { no_guard = S.bot.running })
+        end
         if in_training then
             Game.user = cfg.user_side or 0
             local info = Game.side_info(Game.user)
@@ -762,6 +783,13 @@ re.on_frame(function()
         end
     elseif Speed.active and not S.bot.running and not Speed.probe then
         Speed.restore()
+    end
+    if S.bot_was_running and not S.bot.running then pcall(Dummy.restore_guard) end
+    S.bot_was_running = S.bot.running
+    -- song mode: back to the start position at each count-in
+    if cfg.song_place and S.song_seq and S.song_seq ~= S.song_placed and in_training and not S.bot.running then
+        S.song_placed = S.song_seq
+        pcall(place_fighters, wants_corner(S.combo) and "corner" or "mid")
     end
     if S.bot.running and Game.source ~= "hook" and Game.tick > 0 and Game.source ~= "none" then
         S.bot:stop("the game hook isn't running")
