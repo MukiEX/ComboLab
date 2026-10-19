@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.15.1"
+local VERSION = "1.15.2"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -487,7 +487,7 @@ local function handle_command(c)
         end
     elseif cmd == "speed_scan" then
         local ok, done, info = pcall(Speed.scan, DIR .. "speed_scan.json")
-        if ok and done then flash(string.format("Speed scan: %d types listed in reframework/data/ComboLab/speed_scan.json", info or 0))
+        if ok and done then flash(string.format("Speed scan: %d values listed in reframework/data/ComboLab/speed_scan.json", info or 0))
         else flash("Speed scan failed: " .. tostring(ok and info or done)) end
     elseif cmd == "speed_settings" then
         if tonumber(c.research_speed) then cfg.research_speed = math.max(1, math.min(8, tonumber(c.research_speed))) end

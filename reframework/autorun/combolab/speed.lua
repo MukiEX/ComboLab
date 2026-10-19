@@ -230,60 +230,104 @@ function Speed.update()
 end
 
 -- ---------------------------------------------------------------- scan
--- Lists every type in the game whose fields or methods mention speed, under
--- battle / training / game-flow types, into ComboLab/speed_scan.json, so the
--- right setting can be found by hand when the test finds nothing. Takes a
--- few seconds (the game freezes meanwhile).
-local TYPE_PAT = { "training", "battle", "gbattle", "gamespeed", "flow", "replay", "rollback", "sync", "network%.battle", "app%.application" }
-local NAME_PAT = { "speed", "slow", "timescale", "fastforward", "frameskip", "skipframe", "catchup", "catch_up", "stepcount", "updatecount", "deltatime" }
+-- REFramework can't list every type, so this looks where SF6 must keep it:
+--  * the speed enums found in the Training settings: their named values
+--  * every type we can reach from the training manager and from gBattle's
+--    static objects (the battle itself): all their number fields whose name
+--    hints at speed / slow-down / frame skipping, with current values, and
+--    the methods on those types with such names
+-- Written to ComboLab/speed_scan.json. Best run once at 100% and once at 50%
+-- game speed (Training menu): the field that changes is the one.
+local HINT = { "speed", "slow", "skip", "rate", "scale", "step", "tick", "wait", "delay", "interval", "count" }
 
-local function matches(s, pats)
-    s = s:lower()
-    for _, p in ipairs(pats) do if s:find(p) then return true end end
+local function hinted(n)
+    n = n:lower()
+    for _, h in ipairs(HINT) do if n:find(h, 1, true) then return true end end
     return false
 end
 
-function Speed.scan(path)
-    local tdb = safe(sdk.get_tdb)
-    if not tdb then return false, "sdk.get_tdb isn't available" end
-    local n = safe(tdb.get_num_types, tdb) or 0
-    local out, types = {}, 0
-    for i = 0, n - 1 do
-        local t = safe(tdb.get_type, tdb, i)
-        local name = t and safe(t.get_full_name, t)
-        if name and (matches(name, TYPE_PAT) or matches(name, NAME_PAT)) then
-            local hits = {}
-            for _, f in ipairs(safe(t.get_fields, t) or {}) do
-                local fn = safe(f.get_name, f) or ""
-                if matches(fn, NAME_PAT) then
-                    local ft = safe(f.get_type, f)
-                    hits[#hits + 1] = "field " .. fn .. " : " .. (ft and safe(ft.get_full_name, ft) or "?") .. ((safe(f.is_static, f) and " (static)") or "")
-                end
-            end
-            for _, m in ipairs(safe(t.get_methods, t) or {}) do
-                local mn = safe(m.get_name, m) or ""
-                if matches(mn, NAME_PAT) then hits[#hits + 1] = "method " .. mn .. "()" end
-            end
-            if #hits > 0 or (matches(name, NAME_PAT) and name:lower():find("speed")) then
-                types = types + 1
-                out[#out + 1] = { type = name, hits = hits }
+local function enum_values(tname)
+    local td = safe(sdk.find_type_definition, tname)
+    if not td then return nil end
+    local vals = {}
+    for _, f in ipairs(safe(td.get_fields, td) or {}) do
+        if safe(f.is_static, f) then
+            local v = safe(f.get_data, f, nil)
+            vals[#vals + 1] = (safe(f.get_name, f) or "?") .. " = " .. tostring(v)
+        end
+    end
+    return vals
+end
+
+local function dump_object(obj, path, depth, out, seen, budget, types)
+    if not obj or depth > 3 or budget.n <= 0 then return end
+    local addr = safe(obj.get_address, obj)
+    if addr then
+        if seen[addr] then return end
+        seen[addr] = true
+    end
+    local td = safe(obj.get_type_definition, obj)
+    if not td then return end
+    local tn = safe(td.get_full_name, td) or "?"
+    if not types[tn] then
+        local ms = {}
+        for _, m in ipairs(safe(td.get_methods, td) or {}) do
+            local mn = safe(m.get_name, m) or ""
+            if hinted(mn) then ms[#ms + 1] = mn end
+        end
+        types[tn] = ms
+    end
+    for _, f in ipairs(safe(td.get_fields, td) or {}) do
+        budget.n = budget.n - 1
+        if budget.n <= 0 then return end
+        if not safe(f.is_static, f) then
+            local name = safe(f.get_name, f) or "?"
+            local ft = safe(f.get_type, f)
+            local ftn = ft and safe(ft.get_full_name, ft) or ""
+            local v = safe(obj.get_field, obj, name)
+            if type(v) == "number" or type(v) == "boolean" then
+                if hinted(name) then out[#out + 1] = string.format("%s.%s = %s (%s)", path, name, tostring(v), ftn) end
+            elseif (type(v) == "userdata" or type(v) == "table") and not safe(ft.is_value_type, ft) and ftn ~= "System.String" then
+                dump_object(v, path .. "." .. name, depth + 1, out, seen, budget, types)
             end
         end
     end
-    -- what the training manager actually holds right now
-    local live = {}
-    local tm = safe(sdk.get_managed_singleton, "app.training.TrainingManager")
-    if tm then
-        local found = {}
-        walk(tm, "TrainingManager", 0, found, {}, { n = MAX_FIELDS })
-        for _, c in ipairs(found) do live[#live + 1] = string.format("%s = %s (%s)", c.path, tostring(c.value), c.type) end
+end
+
+function Speed.scan(path)
+    local res = { enums = {}, values = {}, methods = {}, roots = {} }
+    -- named values of the speed enums we know about
+    for _, en in ipairs({ "app.training.GameSpeed", "app.training.ComboTrialManager.ETrialGameSpeed" }) do
+        res.enums[en] = enum_values(en)
     end
+    local seen, budget, types = {}, { n = 20000 }, {}
+    local tm = safe(sdk.get_managed_singleton, "app.training.TrainingManager")
+    if tm then res.roots[#res.roots + 1] = "TrainingManager"; dump_object(tm, "TrainingManager", 0, res.values, seen, budget, types) end
+    -- gBattle: the battle's static objects (Player, Team, Command, Resource, Game, ...)
+    local gb = safe(sdk.find_type_definition, "gBattle")
+    if gb then
+        for _, f in ipairs(safe(gb.get_fields, gb) or {}) do
+            if safe(f.is_static, f) then
+                local name = safe(f.get_name, f) or "?"
+                local holder = safe(f.get_data, f, nil)
+                local obj = holder and (safe(holder.get_data, holder) or holder)
+                if type(obj) == "userdata" or type(obj) == "table" then
+                    res.roots[#res.roots + 1] = "gBattle." .. name
+                    dump_object(obj, "gBattle." .. name, 0, res.values, seen, budget, types)
+                end
+            end
+        end
+    end
+    for tn, ms in pairs(types) do if #ms > 0 then res.methods[tn] = ms end end
     local app = global_candidate()
-    if app then live[#live + 1] = "via.Application.GlobalSpeed = " .. tostring(app.base) end
-    json.dump_file(path, { types_scanned = n, matches = out, live = live })
-    Speed.last_scan = { time = os.time(), types = types, scanned = n, live = #live }
-    Speed.log(string.format("scan: %d of %d types mention speed; written to %s", types, n, path))
-    return true, types
+    if app then res.values[#res.values + 1] = "via.Application.GlobalSpeed = " .. tostring(app.base) end
+    json.dump_file(path, res)
+    local nm = 0
+    for _ in pairs(res.methods) do nm = nm + 1 end
+    Speed.last_scan = { time = os.time(), types = nm, scanned = #res.roots, live = #res.values }
+    Speed.log(string.format("scan: %d values, %d types with speed-ish methods, from %s; written to %s",
+        #res.values, nm, table.concat(res.roots, ", "), path))
+    return true, #res.values
 end
 
 -- ---------------------------------------------------------------- live rate

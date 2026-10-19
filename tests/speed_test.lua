@@ -69,16 +69,24 @@ check(Speed.apply("global", 3) and global_speed == 3, "applied 3x")
 Speed.restore()
 check(global_speed == 1.0 and not Speed.active, "restored")
 check(not Speed.apply("training:TrainingManager._tData.SpeedIndex", 2), "index setting refused")
--- scan over a fake type database
+-- scan: walks the training manager and gBattle's statics
 json = { dump_file = function(p, v) DUMP = v; return true end }
-local function T(name, fields, methods) return { get_full_name = function() return name end,
-    get_fields = function() return fields end, get_methods = function() return methods or {} end } end
-local types = { T("app.training.TrainingData", { mkfield("_GameSpeed", "app.SpeedType"), mkfield("Life", "System.Int32") }),
-    T("app.Sound", { mkfield("Speed", "System.Single") }),
-    T("nBattle.sBattleFlow", {}, { { get_name = function() return "setFrameSkip" end } }) }
-sdk.get_tdb = function() return { get_num_types = function() return #types end, get_type = function(_, i) return types[i + 1] end } end
+local game = { _SlowRate = 1.0, Name = "x" }
+local game_obj = { get_address = function() return 9 end, get_field = function(_, n) return game[n] end,
+    get_type_definition = function() return { get_full_name = function() return "nBattle.sGame" end,
+        get_fields = function() return { mkfield("_SlowRate", "System.Single"), mkfield("Name", "System.String") } end,
+        get_methods = function() return { { get_name = function() return "SetSlowRate" end } } end } end }
+sdk.find_type_definition = function(n)
+    if n == "gBattle" then return { get_fields = function() return { { get_name = function() return "Game" end, is_static = function() return true end,
+        get_data = function() return { get_data = function() return game_obj end } end } } end } end
+    if n == "app.training.GameSpeed" then return { get_fields = function() return { { get_name = function() return "Speed100" end, is_static = function() return true end, get_data = function() return 0 end } } end } end
+    return {}
+end
 local ok, n = Speed.scan("x.json")
-check(ok and n == 2, "scan lists the two battle/training hits, not app.Sound")
-check(DUMP and #DUMP.live >= 3, "scan includes live values")
+local joined = table.concat(DUMP.values, "\n")
+check(ok and joined:find("gBattle.Game._SlowRate = 1.0", 1, true), "scan finds the battle's slow rate")
+check(joined:find("TrainingManager._tData.GameSpeed", 1, true), "scan includes training values")
+check(DUMP.methods["nBattle.sGame"] and DUMP.methods["nBattle.sGame"][1] == "SetSlowRate", "scan lists speed-ish methods")
+check(DUMP.enums["app.training.GameSpeed"][1] == "Speed100 = 0", "scan lists enum names")
 print(fail == 0 and "speed ok" or (fail .. " failed"))
 os.exit(fail == 0 and 0 or 1)
