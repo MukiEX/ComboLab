@@ -106,6 +106,22 @@ local function arc(out, a0, a1, r)
     end
 end
 
+-- Rounds the corner at V between A and B with a quadratic curve, cutting at
+-- most r into each side.
+local function round_corner(out, ax, ay, vx, vy, bx, by, r)
+    local la = math.sqrt((ax - vx) ^ 2 + (ay - vy) ^ 2)
+    local lb = math.sqrt((bx - vx) ^ 2 + (by - vy) ^ 2)
+    local ta, tb = math.min(r, la * 0.5) / la, math.min(r, lb * 0.5) / lb
+    local p0x, p0y = vx + (ax - vx) * ta, vy + (ay - vy) * ta
+    local p2x, p2y = vx + (bx - vx) * tb, vy + (by - vy) * tb
+    for i = 0, 8 do
+        local t = i / 8
+        local u = 1 - t
+        out[#out + 1] = u * u * p0x + 2 * u * t * vx + t * t * p2x
+        out[#out + 1] = u * u * p0y + 2 * u * t * vy + t * t * p2y
+    end
+end
+
 local function raw_path(p)
     local lines, main = {}, {}
     if p.t == "circle" then
@@ -116,38 +132,50 @@ local function raw_path(p)
         return lines
     end
     local seq = {}
-    for c in p.seq:gmatch("%d") do seq[#seq + 1] = tonumber(c) end
+    for c in p.seq:gmatch("%d") do if c ~= "5" then seq[#seq + 1] = tonumber(c) end end
     if #seq == 1 then
         local x, y = pos(seq[1])
         lines[1] = { -x * 0.9, -y * 0.9, x * 0.9, y * 0.9 }
-        return lines, nil, 0.6 + 0.5 * math.abs(x)      -- upright arrows narrow, flat ones wide
+        return lines, 0.6 + 0.5 * math.abs(x)      -- upright arrows narrow, flat ones wide
     end
-    -- a motion that opens with a 90-degree jump (623, 421) starts from the
-    -- centre, giving the familiar Z shape
-    local rs = ring_step(seq[1], seq[2])
-    if rs and math.abs(rs) == 2 then table.insert(seq, 1, 5) end
-    local x, y = pos(seq[1])
-    main[1], main[2] = x, y
-    local arc_end = nil
-    for i = 2, #seq do
-        local a, b = seq[i - 1], seq[i]
-        local s = ring_step(a, b)
-        if s and math.abs(s) == 1 then
-            local a0 = ANG[a] * math.pi / 4
-            arc(main, a0, a0 + s * math.pi / 4, 1)
-            arc_end = b
-        elseif a ~= b then
-            arc_end = nil
-            local bx, by = pos(b)
-            main[#main + 1] = bx; main[#main + 1] = by
+    -- dragon punch (623 / 421): a plain "Z", head pointing forward along the bottom bar
+    if #seq == 3 and (seq[1] == 6 or seq[1] == 4) and seq[2] == 2 and (seq[3] == seq[1] - 3) then
+        local f = seq[1] == 6 and 1 or -1
+        lines[1] = { 0, 0, f, 0, 0, 1, f * 1.1, 1 }
+        return lines
+    end
+    -- everything else: each input is a heading. Straight runs for up / down /
+    -- back / forward, short ones for diagonals, and gentle turns rounded off,
+    -- so 236 reads "down, curve, forward ->" and 41236 is a "C" ending forward.
+    local pts = { 0, 0 }
+    local x, y = 0, 0
+    for _, d in ipairs(seq) do
+        local hx, hy = pos(d)
+        local L = (d % 2 == 0) and 1 or 0.45
+        x, y = x + hx * L, y + hy * L
+        pts[#pts + 1] = x; pts[#pts + 1] = y
+    end
+    main[1], main[2] = pts[1], pts[2]
+    local n = #pts // 2
+    for i = 2, n - 1 do
+        local ax, ay = pts[2 * i - 3], pts[2 * i - 2]
+        local vx, vy = pts[2 * i - 1], pts[2 * i]
+        local bx, by = pts[2 * i + 1], pts[2 * i + 2]
+        local d1x, d1y, d2x, d2y = vx - ax, vy - ay, bx - vx, by - vy
+        local cosang = (d1x * d2x + d1y * d2y) / math.sqrt((d1x * d1x + d1y * d1y) * (d2x * d2x + d2y * d2y))
+        if cosang > 0.6 then
+            round_corner(main, ax, ay, vx, vy, bx, by, 0.45)       -- 45-degree turn: smooth
+        else
+            main[#main + 1] = vx; main[#main + 1] = vy            -- sharp turn stays sharp
         end
     end
+    main[#main + 1] = pts[2 * n - 1]; main[#main + 1] = pts[2 * n]
     lines[1] = main
-    return lines, arc_end
+    return lines
 end
 
 function Motion.glyph(p)
-    local lines, arc_end, fixed_aspect = raw_path(p)
+    local lines, fixed_aspect = raw_path(p)
     local minx, miny, maxx, maxy = math.huge, math.huge, -math.huge, -math.huge
     for _, l in ipairs(lines) do
         for i = 1, #l, 2 do
@@ -173,14 +201,6 @@ function Motion.glyph(p)
     local dx, dy = m[n - 1] - m[n - 3], m[n] - m[n - 2]
     local dl = math.sqrt(dx * dx + dy * dy)
     if dl > 0 then dx, dy = dx / dl, dy / dl end
-    if arc_end then
-        -- a motion that ends on a curve points between the curve and the final
-        -- direction, so 236 ends pointing forward-ish and 623 ends forward
-        local rx, ry = pos(arc_end)
-        dx, dy = dx + rx, dy + ry
-        dl = math.sqrt(dx * dx + dy * dy)
-        if dl > 0 then dx, dy = dx / dl, dy / dl end
-    end
     return { lines = out, head = { m[n - 1], m[n], dx, dy }, aspect = aspect }
 end
 

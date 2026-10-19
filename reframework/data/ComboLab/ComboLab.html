@@ -399,7 +399,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.10.1";
+const PAGE_VERSION = "1.10.2";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -444,20 +444,31 @@ function motionParts(label) {
 
 function motionGlyph(p) {
   const arc = (out, a0, a1) => { const n = Math.max(2, Math.ceil(Math.abs(a1 - a0) / (Math.PI / 24))); for (let i = 1; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; out.push([Math.cos(a), Math.sin(a)]); } };
-  let line = [], arcEnd = null, fixed = null;
+  let line = [], fixed = null;
   if (p.t === "circle") { line.push([1, 0]); arc(line, 0, Math.PI * 2 * 0.86); }
   else {
-    const seq = [...p.seq].map(Number);
+    const seq = [...p.seq].map(Number).filter(d => d !== 5);
     if (seq.length === 1) { const [x, y] = moPos(seq[0]); line = [[-x * 0.9, -y * 0.9], [x * 0.9, y * 0.9]]; fixed = 0.6 + 0.5 * Math.abs(x); }
-    else {
-      const rs = moRing(seq[0], seq[1]);
-      if (rs !== null && Math.abs(rs) === 2) seq.unshift(5);
-      line.push(moPos(seq[0]));
-      for (let i = 1; i < seq.length; i++) {
-        const a = seq[i - 1], b = seq[i], s = moRing(a, b);
-        if (s !== null && Math.abs(s) === 1) { const a0 = MO_ANG[a] * Math.PI / 4; arc(line, a0, a0 + s * Math.PI / 4); arcEnd = b; }
-        else if (a !== b) { line.push(moPos(b)); arcEnd = null; }
+    else if (seq.length === 3 && (seq[0] === 6 || seq[0] === 4) && seq[1] === 2 && seq[2] === seq[0] - 3) {
+      const f = seq[0] === 6 ? 1 : -1;                       // dragon punch: a plain Z
+      line = [[0, 0], [f, 0], [0, 1], [f * 1.1, 1]];
+    } else {
+      // each input is a heading: straight runs, short diagonals, gentle turns rounded
+      const pts = [[0, 0]]; let x = 0, y = 0;
+      for (const d of seq) { const [hx, hy] = moPos(d); const L = d % 2 === 0 ? 1 : 0.45; x += hx * L; y += hy * L; pts.push([x, y]); }
+      line.push(pts[0]);
+      for (let i = 1; i < pts.length - 1; i++) {
+        const [ax, ay] = pts[i - 1], [vx, vy] = pts[i], [bx, by] = pts[i + 1];
+        const d1x = vx - ax, d1y = vy - ay, d2x = bx - vx, d2y = by - vy;
+        const cos = (d1x * d2x + d1y * d2y) / Math.sqrt((d1x * d1x + d1y * d1y) * (d2x * d2x + d2y * d2y));
+        if (cos > 0.6) {
+          const la = Math.hypot(ax - vx, ay - vy), lb = Math.hypot(bx - vx, by - vy);
+          const ta = Math.min(0.45, la * 0.5) / la, tb = Math.min(0.45, lb * 0.5) / lb;
+          const p0 = [vx + (ax - vx) * ta, vy + (ay - vy) * ta], p2 = [vx + (bx - vx) * tb, vy + (by - vy) * tb];
+          for (let k = 0; k <= 8; k++) { const t = k / 8, u = 1 - t; line.push([u * u * p0[0] + 2 * u * t * vx + t * t * p2[0], u * u * p0[1] + 2 * u * t * vy + t * t * p2[1]]); }
+        } else line.push([vx, vy]);
       }
+      line.push(pts[pts.length - 1]);
     }
   }
   const xs = line.map(q => q[0]), ys = line.map(q => q[1]);
@@ -469,35 +480,24 @@ function motionGlyph(p) {
   const pts = line.map(([x, y]) => [x * s + ox, y * s + oy]);
   const n = pts.length;
   let dx = pts[n - 1][0] - pts[n - 2][0], dy = pts[n - 1][1] - pts[n - 2][1], dl = Math.hypot(dx, dy) || 1;
-  dx /= dl; dy /= dl;
-  if (arcEnd !== null) { const [rx, ry] = moPos(arcEnd); dx += rx; dy += ry; dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl; }
-  return {pts, head: [pts[n - 1][0], pts[n - 1][1], dx, dy], aspect};
+  return {pts, head: [pts[n - 1][0], pts[n - 1][1], dx / dl, dy / dl], aspect};
 }
 
 const glyphSvgCache = {};
-// fighting-game command-list style: orange body, yellow gloss, dark outline, big head
 function glyphSvg(p) {
   const key = p.t + (p.seq || "");
   if (glyphSvgCache[key]) return glyphSvgCache[key];
-  const g = motionGlyph(p), sw = 0.24, hl = sw * 1.75, hw = sw * 1.45, cut = hl * 0.6, ol = sw * 0.22;
+  const g = motionGlyph(p), sw = 0.15, hl = sw * 2.1, hw = sw * 1.7, cut = hl * 0.6;
   const [hx, hy, dx, dy] = g.head;
   const pts = g.pts.slice();
   while (pts.length > 2 && Math.hypot(pts[pts.length - 1][0] - hx, pts[pts.length - 1][1] - hy) < cut) pts.pop();
   pts.push([hx - dx * cut, hy - dy * cut]);
   const f = v => v.toFixed(3);
   const d = pts.map((q, i) => (i ? "L" : "M") + f(q[0]) + " " + f(q[1])).join("");
-  const head = (grow, oy = 0) => {
-    const bx = hx - dx * hl, by = hy - dy * hl + oy, nx = -dy, ny = dx, w = hw + grow;
-    return [[hx + dx * grow * 1.6, hy + oy + dy * grow * 1.6], [bx - dx * grow + nx * w, by - dy * grow + ny * w],
-            [bx + dx * hl * 0.25, by + dy * hl * 0.25], [bx - dx * grow - nx * w, by - dy * grow - ny * w]].map(q => f(q[0]) + "," + f(q[1])).join(" ");
-  };
-  const gy = -sw * 0.12;
-  const line = (w, c, oy = 0) => `<path d="${d}" transform="translate(0 ${f(oy)})" fill="none" stroke="${c}" stroke-width="${f(w)}" stroke-linecap="round" stroke-linejoin="round"/>`;
-  const pad = 0.32, W = g.aspect + pad * 2, H = 1 + pad * 2;
-  const svg = `<svg class="mo" viewBox="${-pad} ${-pad} ${f(W)} ${f(H)}" style="width:${f(W / H * 1.3)}em" aria-hidden="true">`
-    + line(sw + ol * 2, "#461e00") + `<polygon points="${head(ol)}" fill="#461e00"/>`
-    + line(sw, "#ff8000") + `<polygon points="${head(0)}" fill="#ff8000"/>`
-    + line(sw * 0.5, "#ffe428", gy) + `<polygon points="${head(-sw * 0.38, gy)}" fill="#ffe428"/></svg>`;
+  const bx = hx - dx * hl, by = hy - dy * hl, nx = -dy, ny = dx;
+  const head = [[hx, hy], [bx + nx * hw, by + ny * hw], [bx + dx * hl * 0.2, by + dy * hl * 0.2], [bx - nx * hw, by - ny * hw]].map(q => f(q[0]) + "," + f(q[1])).join(" ");
+  const pad = 0.28, W = g.aspect + pad * 2, H = 1 + pad * 2;
+  const svg = `<svg class="mo" viewBox="${-pad} ${-pad} ${f(W)} ${f(H)}" style="width:${f(W / H * 1.3)}em" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/><polygon points="${head}" fill="currentColor"/></svg>`;
   return (glyphSvgCache[key] = svg);
 }
 
