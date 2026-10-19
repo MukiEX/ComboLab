@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.16.0"
+local VERSION = "1.16.1"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -495,6 +495,12 @@ local function handle_command(c)
         local ok, done, info = pcall(Speed.scan, DIR .. "speed_scan.json")
         if ok and done then flash(string.format("Speed scan: %d values listed in reframework/data/ComboLab/speed_scan.json", info or 0))
         else flash("Speed scan failed: " .. tostring(ok and info or done)) end
+    elseif cmd == "speed_probe" then
+        if not in_training or S.bot.running or Speed.test then flash("Speed probe: Training mode, bot stopped")
+        else
+            local ok, why = Speed.start_probe(DIR .. "speed_probe.json")
+            flash(ok and "Speed probe: hands off for ~3 s (the game may stutter)" or ("Speed probe: " .. tostring(why)))
+        end
     elseif cmd == "speed_settings" then
         if tonumber(c.research_speed) then cfg.research_speed = math.max(1, math.min(8, tonumber(c.research_speed))) end
         if c.speed_key ~= nil then cfg.speed_key = (c.speed_key ~= "" and c.speed_key ~= false) and tostring(c.speed_key) or nil end
@@ -728,6 +734,11 @@ re.on_frame(function()
         end
     end
     if S.bot.running and not in_training then S.bot:stop("left Training mode") end
+    if Speed.probe then
+        if not in_training then Speed.probe = nil; Speed.restore() else Speed.update_probe() end
+        status_dirty = true
+        if not Speed.probe and Speed.last_probe then flash(string.format("Speed probe: %d fields follow the game speed (speed_probe.json)", Speed.last_probe.hits)) end
+    end
     if S.scan_pending and (Speed.core or os.clock() - S.scan_pending > 2) then
         S.scan_pending = nil
         handle_command({ cmd = "speed_scan" })
@@ -745,7 +756,7 @@ re.on_frame(function()
             local b = Speed.best()
             flash(b and string.format("Speed test: %.1fx works (%s)", Speed.results[b].ratio, b) or ("Speed test: " .. (Speed.error or "no setting gave extra frames")))
         end
-    elseif Speed.active and not S.bot.running then
+    elseif Speed.active and not S.bot.running and not Speed.probe then
         Speed.restore()
     end
     if S.bot.running and Game.source ~= "hook" and Game.tick > 0 and Game.source ~= "none" then
@@ -906,6 +917,7 @@ re.on_draw_ui(function()
         end
         if st.error then imgui.text_colored(st.error, 0xFF5555FF) end
         if imgui.button("Scan the game for speed settings (freezes a few seconds)") then handle_command({ cmd = "speed_scan" }) end
+        if imgui.button("Probe what Game Speed changes (100% / 150% / 100%)") then handle_command({ cmd = "speed_probe" }) end
         local ch, v = imgui.slider_float("Research speed (x)", cfg.research_speed or 1, 1, 1.5)
         if ch then cfg.research_speed = math.floor(v * 10 + 0.5) / 10; save_cfg() end
         if st.fps then imgui.text(string.format("battle now: %.1f frames/s%s", st.fps, Speed.active and string.format("  (%.2gx on)", Speed.active.mult) or "")) end

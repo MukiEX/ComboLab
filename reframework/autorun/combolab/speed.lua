@@ -376,6 +376,105 @@ function Speed.scan(path)
     return true, #res.values
 end
 
+
+-- ---------------------------------------------------------------- probe
+-- Finds what Training's Game Speed really changes inside the battle: takes a
+-- snapshot of every number field (not just "speed"-named ones) under the
+-- battle's system objects at 100%, again at 150%, and again back at 100%.
+-- Fields that match in the first and last snapshot but differ at 150% are
+-- what the speed setting drives (running counters differ in all three and
+-- drop out). Results go to ComboLab/speed_probe.json and the log.
+local PROBE_ROOTS = { "System", "Flow", "Chronos", "Game", "Training", "Rollback", "Config", "Setting",
+                      "Work", "Round", "Judge", "Info", "Mediator", "Input" }
+
+local function snap_object(obj, path, depth, out, seen, budget)
+    if not obj or depth > 4 or budget.n <= 0 then return end
+    local addr = safe(obj.get_address, obj)
+    if addr then
+        if seen[addr] then return end
+        seen[addr] = true
+    end
+    local td = safe(obj.get_type_definition, obj)
+    if not td then return end
+    for _, f in ipairs(safe(td.get_fields, td) or {}) do
+        budget.n = budget.n - 1
+        if budget.n <= 0 then return end
+        if not safe(f.is_static, f) then
+            local name = safe(f.get_name, f) or "?"
+            local v = safe(obj.get_field, obj, name)
+            local tv = type(v)
+            if tv == "number" or tv == "boolean" then
+                out[path .. "." .. name] = v
+            elseif tv == "userdata" or tv == "table" then
+                local ft = safe(f.get_type, f)
+                local ftn = ft and safe(ft.get_full_name, ft) or ""
+                if ftn ~= "System.String" and not ftn:find("%[%]") and not ftn:find("^System%.Collections") then
+                    snap_object(v, path .. "." .. name, depth + 1, out, seen, budget)
+                end
+            end
+        end
+    end
+end
+
+function Speed.snapshot()
+    local out, seen, budget = {}, {}, { n = 60000 }
+    local gb = safe(sdk.find_type_definition, "gBattle")
+    if gb then
+        for _, root in ipairs(PROBE_ROOTS) do
+            local f = safe(gb.get_field, gb, root)
+            local holder = f and safe(f.get_data, f, nil)
+            local obj = holder and (safe(holder.get_data, holder) or holder)
+            if obj then snap_object(obj, "gBattle." .. root, 0, out, seen, budget) end
+        end
+    end
+    if Speed.core then snap_object(Speed.core, "uBattleCore", 0, out, seen, budget) end
+    local tm = safe(sdk.get_managed_singleton, "app.training.TrainingManager")
+    if tm then snap_object(tm, "TrainingManager", 0, out, seen, budget) end
+    return out
+end
+
+-- Speed.start_probe(path): runs from Speed.update(); needs Training speed
+-- found by discover() (the OS_Game_Speed candidate).
+function Speed.start_probe(path)
+    Speed.restore()
+    Speed.watch_core()
+    local key
+    for _, c in ipairs(Speed.discover()) do if c.kind == "tspeed" then key = c.key end end
+    if not key then return false, "Training's Game Speed setting wasn't found" end
+    Speed.probe = { key = key, path = path, phase = "a", t0 = os.clock() }
+    return true
+end
+
+function Speed.update_probe()
+    local P = Speed.probe
+    if not P then return end
+    local now = os.clock()
+    if P.phase == "a" and now - P.t0 > 0.5 then
+        P.s1 = Speed.snapshot()
+        Speed.apply(P.key, 1.5)
+        P.phase, P.t0 = "b", now
+    elseif P.phase == "b" and now - P.t0 > 1.0 then
+        P.s2 = Speed.snapshot()
+        Speed.restore()
+        P.phase, P.t0 = "c", now
+    elseif P.phase == "c" and now - P.t0 > 1.0 then
+        local s3 = Speed.snapshot()
+        local hits = {}
+        for k, v1 in pairs(P.s1) do
+            local v2, v3 = P.s2[k], s3[k]
+            if v2 ~= nil and v1 == v3 and v1 ~= v2 then hits[#hits + 1] = string.format("%s: %s at 100%%, %s at 150%%", k, tostring(v1), tostring(v2)) end
+        end
+        table.sort(hits)
+        local n = 0
+        for _ in pairs(P.s1) do n = n + 1 end
+        json.dump_file(P.path, { fields_compared = n, changed_with_speed = hits })
+        Speed.log(string.format("probe: %d of %d fields follow the game speed", #hits, n))
+        for i = 1, math.min(#hits, 40) do Speed.log("  " .. hits[i]) end
+        Speed.last_probe = { time = os.time(), hits = #hits, fields = n, sample = { hits[1], hits[2], hits[3], hits[4], hits[5], hits[6] } }
+        Speed.probe = nil
+    end
+end
+
 -- ---------------------------------------------------------------- live rate
 -- Battle frames per second over the last ~second (for the status / bot).
 local rate = { t = nil, k = nil, fps = nil }
@@ -398,7 +497,7 @@ function Speed.status()
         candidates = cands, base_fps = Speed.base_fps, testing = Speed.test ~= nil, error = Speed.error,
         active = Speed.active and { key = Speed.active.key, mult = Speed.active.mult } or nil,
         best = Speed.best(), fps = rate.fps, results = Speed.results, scan = Speed.last_scan,
-        max_mult = Speed.max_mult(Speed.best()),
+        max_mult = Speed.max_mult(Speed.best()), probe = Speed.last_probe, probing = Speed.probe ~= nil,
     }
 end
 

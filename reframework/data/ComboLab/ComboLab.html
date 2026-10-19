@@ -253,6 +253,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
         <div class="row" style="gap:14px;align-items:flex-end;margin-top:12px">
           <label class="f">Research speed <select id="botSpeed"><option value="1">1x (normal)</option><option value="1.2">1.2x</option><option value="1.3">1.3x</option><option value="1.4">1.4x</option><option value="1.5">1.5x</option></select></label>
           <button class="btn small" id="btnSpeedTest" style="margin-bottom:3px">Test speed settings</button>
+          <button class="btn small" id="btnSpeedProbe" style="margin-bottom:3px" title="Switches the game to 150% and back for a moment and lists every value inside the battle that follows it (speed_probe.json)">Probe speed</button>
           <button class="btn small" id="btnSpeedScan" style="margin-bottom:3px" title="Lists every speed-related setting in the game into speed_scan.json (the game freezes a few seconds)">Scan game</button>
           <span id="speedStatus" class="ink2" style="font-size:12.5px;margin-bottom:6px"></span>
         </div>
@@ -513,7 +514,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.16.0";
+const PAGE_VERSION = "1.16.1";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1586,6 +1587,7 @@ $("btnBotAll").onclick = async () => {
 };
 $("btnBotStop").onclick = () => sendCommand({cmd: "bot_stop"});
 $("btnSpeedTest").onclick = () => { sendCommand({cmd: "speed_test", mult: 2}); $("speedStatus").textContent = "Testing in game: about 15 seconds, hands off…"; };
+$("btnSpeedProbe").onclick = () => { sendCommand({cmd: "speed_probe"}); $("speedStatus").textContent = "Probing in game: about 3 seconds, hands off…"; };
 $("btnSpeedScan").onclick = () => { sendCommand({cmd: "speed_scan"}); $("speedStatus").textContent = "Scanning in game (it freezes a few seconds)… the list goes to speed_scan.json"; };
 $("botSpeed").onchange = () => sendCommand({cmd: "speed_settings", research_speed: +$("botSpeed").value});
 let speedSynced = false;
@@ -1603,6 +1605,8 @@ function renderSpeed() {
   else if (sp.base_fps) t = `<span style="color:var(--warning)">The speed test found no setting that runs more frames; the bot stays at 1x.</span>`;
   else t = `<span class="muted">Run <b>Test speed settings</b> once (Training mode, a combo loaded) before using more than 1x.</span>`;
   if (sp.active) t += ` · <b>${sp.active.mult}x on</b>`;
+  if (sp.probing) t += `<br>Probing… hands off`;
+  if (sp.probe) t += `<br><span class="muted">Probe ${agoS(sp.probe.time)}: ${sp.probe.hits} of ${sp.probe.fields} values follow the game speed, saved to <span style="font-family:var(--mono)">speed_probe.json</span></span>`;
   if (sp.scan) t += `<br><span class="muted">Scan ${agoS(sp.scan.time)}: ${sp.scan.live} values from ${sp.scan.scanned} places, saved to <span style="font-family:var(--mono)">reframework/data/ComboLab/speed_scan.json</span></span>`;
   if (sp.fps && (sp.active || sp.testing)) t += ` · ${sp.fps.toFixed(0)} frames/s`;
   box.innerHTML = t;

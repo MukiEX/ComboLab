@@ -95,5 +95,26 @@ check(ok and joined:find("gBattle.Game._SlowRate = 1.0", 1, true), "scan finds t
 check(joined:find("TrainingManager._tData.GameSpeed", 1, true), "scan includes training values")
 check(DUMP.methods["nBattle.sGame"] and DUMP.methods["nBattle.sGame"][1] == "SetSlowRate", "scan lists speed-ish methods")
 check(DUMP.enums["app.training.GameSpeed"][1] == "Speed100 = 0", "scan lists enum names")
+-- probe: a battle field that follows the applied speed shows up; a running counter doesn't
+local chron = { _Rate = 1.0, _Counter = 0 }
+local chron_obj = { get_address = function() return 77 end, get_field = function(_, n) return chron[n] end,
+    get_type_definition = function() return { get_fields = function() return { mkfield("_Rate", "System.Single"), mkfield("_Counter", "System.Int32") } end } end }
+sdk.find_type_definition = function(n)
+    if n == "gBattle" then return { get_field = function(_, root) if root == "Chronos" then return { get_data = function() return chron_obj end } end end } end
+    return {}
+end
+local okp = Speed.start_probe("p.json")
+check(okp, "probe starts")
+for _ = 1, 60 * 5 do
+    CLK = CLK + 1 / 60
+    chron._Rate = (0.5 + 0.1 * applied_speed) ; chron._Counter = chron._Counter + 1
+    Speed.update_probe()
+    if not Speed.probe then break end
+end
+check(not Speed.probe and Speed.last_probe and Speed.last_probe.hits >= 1, "probe finished")
+local found_rate = false
+for _, h in ipairs(DUMP.changed_with_speed or {}) do if h:find("gBattle.Chronos._Rate", 1, true) then found_rate = true end; check(not h:find("_Counter"), "counter filtered out") end
+check(found_rate, "probe finds the rate field")
+check(applied_speed == 5, "speed back to 100% after the probe")
 print(fail == 0 and "speed ok" or (fail .. " failed"))
 os.exit(fail == 0 and 0 or 1)
