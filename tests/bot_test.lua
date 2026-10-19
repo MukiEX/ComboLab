@@ -187,6 +187,21 @@ check(r.windows[3].L - r.windows[3].E + 1 == 9, "DR cancel window is 9 frames")
 check(r.windows[4].L == 6, "5HP late edge = 6")
 check(prof.windows[3].sweet_hi and prof.windows[3].sweet_hi < prof.windows[3].L, "late DR presses flagged by the sweet spot")
 check(r.clean == r.clean_of, "validation runs all clean")
+-- a second run on the same combo starts from the windows it already has
+FILES["ComboLab\\bot\\guile-test.json"] = nil
+FILES["ComboLab\\command.json"] = { seq = 3, cmd = "bot_start", ids = { "guile-test" }, options = { reps = 2, reset = false } }
+n = 0
+repeat
+    for _ = 1, 600 do frame() end
+    n = n + 600
+until (FILES["ComboLab\\bot\\guile-test.json"] and not (FILES["ComboLab\\status.json"].bot or {}).running) or n > 400000
+local r2 = FILES["ComboLab\\bot\\guile-test.json"]
+print("second run attempts", r2 and r2.attempts, "vs first", r.attempts)
+check(r2 and r2.ok, "second run finished")
+for k = 2, 4 do
+    check(r2 and r2.windows[k] and r2.windows[k].E == r.windows[k].E and r2.windows[k].L == r.windows[k].L, "step " .. k .. " same window on the second run")
+end
+check(r2 and r2.attempts < r.attempts, "second run is quicker")
 print(fail == 0 and "bot test OK" or (fail .. " failed"))
 local fo = os.getenv("BOT_OUT")
 if fo then

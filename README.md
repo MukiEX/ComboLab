@@ -119,6 +119,8 @@ The bot plays combos for you in Training mode and sweeps each step's press timin
 2. Sweet-spot pass: plays the full combo varying one step across its window, so the profile learns which part keeps the next step alive.
 3. Checks the full combo at the final target timings and reports how many were clean.
 
+**Re-running a combo** keeps its profile and starts from what's already there: for each step with a measured window, the bot first checks that window's edges (about four attempts), and only searches if they no longer hold. Tick **Replace existing profile** to start from scratch instead. Steps with no measured window start from the frame-data prediction.
+
 Position comes from the combo name ("corner" in the name means corner) unless you override it. Before each attempt the bot checks that both fighters actually ended up in place: it re-applies the move for a few frames if the game puts them back, and stops that combo with a reason if they still aren't there. Results, including why a combo failed, show in the web page and are saved to `reframework/data/ComboLab/bot/<id>.json`.
 
 **Speed:** each attempt takes about 4–6 seconds (most of it waiting for the dummy to get up). A 4-step combo takes around 100 attempts at 2 repeats, about 8 minutes; long combos take longer. Use 1 repeat and turn off the sweet-spot pass for a quick first pass.

@@ -176,7 +176,7 @@ function Bot:next_combo()
             self.env.trace(string.format("skip %s: %s", tostring(id), skip))
             self.results[#self.results + 1] = { id = id, name = combo and combo.name or id, ok = false, reason = "skipped: " .. skip }
         else
-            if self.opts.reset ~= false then self.env.reset_profile() end
+            if self.opts.reset == true then self.env.reset_profile() end
             local name = (combo.name or ""):lower()
             local bot = combo.bot or {}
             self.cur = {
@@ -231,8 +231,17 @@ function Bot:seed(k)
     local c = self.cur
     local sw = c.sweep
     if sw.seeded or not c.profile or not c.profile.prediction then return false end
-    local ok, pred = pcall(c.profile.prediction, c.profile, k)
-    if not ok or not pred or pred.impossible then return false end
+    -- a window measured on an earlier run beats the frame-data prediction
+    local src, pred = "frame data", nil
+    local okw, w = pcall(c.profile.window, c.profile, k)
+    if okw and w and not w.pred and (w.n or 0) >= 3 and w.E and w.L then
+        pred, src = { E = w.E, L = w.L }, "previous profile"
+    else
+        local ok
+        ok, pred = pcall(c.profile.prediction, c.profile, k)
+        if not ok then pred = nil end
+    end
+    if not pred or pred.impossible then return false end
     local dmin = c.plans[k].lead + 1
     if pred.L < dmin or pred.E > self.dmax then return false end
     local E, L = math.max(dmin, pred.E), math.min(self.dmax, pred.L)
@@ -244,7 +253,8 @@ function Bot:seed(k)
         if d >= dmin and d <= self.dmax then sw.list[#sw.list + 1] = d end
     end
     c.d = sw.list[1]
-    self.env.trace(string.format("step %d: predicted window %d..%d from frame data", k, pred.E, pred.L))
+    sw.src = src
+    self.env.trace(string.format("step %d: checking window %d..%d from %s", k, pred.E, pred.L, src))
     return true
 end
 
@@ -336,7 +346,7 @@ function Bot:on_result(res)
             if works(sw.pE) and works(sw.pL) and fails(sw.pE - 1) and fails(sw.pL + 1) then
                 sw.E, sw.L = sw.pE, sw.pL
                 sw.mode = "confirm"
-                self.env.trace(string.format("step %d: prediction confirmed", k))
+                self.env.trace(string.format("step %d: %s window confirmed", k, sw.src or "predicted"))
             else
                 self.env.trace(string.format("step %d: prediction was off; searching", k))
                 sw.mode = "scan"

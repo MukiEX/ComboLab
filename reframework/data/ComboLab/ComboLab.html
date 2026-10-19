@@ -264,7 +264,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
         <label class="f">Position <select id="botPos"><option value="">Auto (from name)</option><option value="mid">Midscreen</option><option value="corner">Corner</option></select></label>
         <label class="f">Extra spacing <input type="range" id="botSpacing" min="0" max="200" step="5" value="0"></label>
         <label class="switch"><input type="checkbox" id="botSweet" checked> Sweet-spot pass</label>
-        <label class="switch"><input type="checkbox" id="botReset" checked> Replace existing profile</label>
+        <label class="switch"><input type="checkbox" id="botReset"> Replace existing profile</label>
       </div>
       <div class="row" style="margin-top:14px">
         <button class="btn primary" id="btnBotOne">Profile this combo</button>
@@ -413,7 +413,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.12.0";
+const PAGE_VERSION = "1.12.1";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
