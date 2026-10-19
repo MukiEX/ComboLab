@@ -531,7 +531,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.19.1";
+const PAGE_VERSION = "1.19.2";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1975,7 +1975,13 @@ async function renderUpdates(opts = {}) {
     try { await FS.update({action: "settings", source: $("updSource").value, git_url: $("updGitUrl").value.trim(), git_branch: $("updGitBranch").value.trim()}); updLast = null; return true; }
     catch (e) { msg(esc(e.message), true); return false; }
   };
-  $("updSource").onchange = async () => { showGit(); if ($("updSource").value === "hub") await saveSrc(); };
+  // a different source makes the last check's file list meaningless: save it and check again
+  $("updSource").onchange = async () => {
+    showGit();
+    $("updApply").disabled = true;
+    if ($("updSource").value === "hub") { if (await saveSrc()) $("updCheck").click(); }
+  };
+  ["updGitUrl", "updGitBranch"].forEach(id => $(id).addEventListener("input", () => { $("updApply").disabled = true; }));
   $("updCheck").onclick = async () => {
     if (updBusy || !(await saveSrc())) return;
     updBusy = true; msg("Checking…");

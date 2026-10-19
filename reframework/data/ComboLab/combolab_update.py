@@ -132,11 +132,22 @@ class HubSource:
             with urllib.request.urlopen(req, timeout=30, context=self.ctx if url.startswith("https") else None) as r:
                 return r.read()
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                raise UpdateError("this hub doesn't serve updates yet (it needs 1.14 or newer: rebuild it from the repo)")
+            # a hub older than 1.14 has no update routes: it answers 404, or
+            # 401 (it takes the path for a sync call that needs a token)
+            if e.code in (401, 404) and "/client/" in path:
+                raise UpdateError("the hub%s doesn't hand out updates yet: rebuild it from the repo (needs 1.14 or newer), or pick \"A git repo\" for now" % self._version_note())
             raise UpdateError("hub said %s" % e.code)
         except (urllib.error.URLError, OSError) as e:
             raise UpdateError("can't reach the hub: %s" % getattr(e, "reason", e))
+
+    def _version_note(self):
+        try:
+            req = urllib.request.Request(self.hub + "/healthz", headers={"User-Agent": "ComboLab-update/" + UPDATER_VERSION})
+            with urllib.request.urlopen(req, timeout=10, context=self.ctx if self.hub.startswith("https") else None) as r:
+                v = json.loads(r.read()).get("version")
+            return " (version %s)" % v if v else ""
+        except Exception:
+            return ""
 
     def manifest(self):
         try:
