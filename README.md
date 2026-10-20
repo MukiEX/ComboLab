@@ -308,6 +308,12 @@ Editing a combo's steps changes its hash, and the old profile resets the next ti
 - **Projectile hits** after you have recovered are credited to your last non-neutral action. Combos that rely on a fireball landing late may bind oddly.
 - **Juggles:** hitstun-left (`damage_time`) may read 0 while the opponent is airborne. Those samples simply give no estimate.
 
+## If the game crashes
+
+- **Changes to the game happen on the game's thread.** Dummy and Training settings, game speed and fighter teleports are queued and applied at the start of the game's own update (REFramework's `UpdateBehavior`), not from the overlay's frame callback, so they never race the game. The REFramework log says which one is in use at startup ("game-state changes run on: ...").
+- **Breadcrumbs:** before each of those changes ComboLab notes what it's about to do in `crumbs.json`, plus a heartbeat every 2 seconds. If the game closes within a few seconds of one of them, the next start logs it and the page header shows "Last time the game closed right after: ..." (hover for the steps before it, click to dismiss). Send that line along with `re2_framework_log.txt` from the game folder.
+- **To rule ComboLab's settings out:** turn off **Set the dummy and Training settings for each combo** (Profiling tab). Then loading a combo changes nothing in the game.
+
 ## Development
 
 `tests/` holds the pure-Lua engine tests, a mocked-REFramework integration test, the overlay previewer and the notation parser test. Run them from the repository root:

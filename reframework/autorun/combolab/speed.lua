@@ -12,6 +12,7 @@
 -- (from the input hook) against the clock. Only a candidate that really gives
 -- more frames per second is used. Every change is undone on restore().
 local Speed = {}
+local Crumbs = require("combolab.crumbs")
 
 Speed.candidates = nil     -- { {key, label, get(), set(v), base, kind} }
 Speed.results = {}         -- key -> { fps = n, ratio = r, ok = bool, note = str }
@@ -155,10 +156,19 @@ function Speed.apply(key, mult)
             local v = value_for(c, mult)
             if v == nil then return false, "that setting can't go past the menu's choices" end
             local orig = c.get()
-            local ok = c.set(v)
-            if not ok then return false, "couldn't set " .. c.label end
-            Speed.log(string.format("set %s to %s (reads back %s)", c.key, tostring(v), tostring(c.get())))
             Speed.active = { key = key, mult = mult, orig = orig, c = c }
+            if Speed.run then
+                -- on the game's thread (ComboLab.lua sets Speed.run = Game.defer)
+                Speed.run(string.format("game speed %s = %s", c.key, tostring(v)), function()
+                    local ok = c.set(v)
+                    Speed.log(string.format("set %s to %s (%s, reads back %s)", c.key, tostring(v), ok and "ok" or "failed", tostring(c.get())))
+                end)
+                return true
+            end
+            Crumbs.add(string.format("game speed %s = %s", c.key, tostring(v)))
+            local ok = c.set(v)
+            if not ok then Speed.active = nil; return false, "couldn't set " .. c.label end
+            Speed.log(string.format("set %s to %s (reads back %s)", c.key, tostring(v), tostring(c.get())))
             return true
         end
     end
@@ -169,7 +179,14 @@ function Speed.restore()
     local a = Speed.active
     if not a then return end
     Speed.active = nil
-    if a.orig ~= nil then pcall(a.c.set, a.orig) end
+    if a.orig ~= nil then
+        if Speed.run then
+            Speed.run("game speed back to " .. tostring(a.orig), function() pcall(a.c.set, a.orig) end)
+        else
+            Crumbs.add("game speed back to " .. tostring(a.orig))
+            pcall(a.c.set, a.orig)
+        end
+    end
 end
 
 -- the candidate the last test found to work (biggest real speed-up)

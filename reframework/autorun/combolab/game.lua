@@ -231,9 +231,15 @@ end
 Game.pending_tp = nil
 Game.tp_result = nil
 function Game.teleport(user_x, dummy_x)
-    local ok = apply_tp(user_x, dummy_x)
-    if ok then Game.pending_tp = { ux = user_x, dx = dummy_x, n = 0 } end
-    return ok
+    local cp = players()
+    local up = cp and cp[Game.user]
+    if not up or not up.POS_SETx then return false end
+    Game.tp_result = nil
+    Game.defer(string.format("teleport %.0f / %.0f", user_x, dummy_x), function()
+        apply_tp(user_x, dummy_x)
+        Game.pending_tp = { ux = user_x, dx = dummy_x, n = 0 }
+    end)
+    return true
 end
 
 function Game.teleport_tick()
@@ -261,12 +267,53 @@ function Game.teleport_tick()
 end
 Game.STAGE_EDGE = 47841280 / 65536.0
 
+-- ---------------------------------------------------------------- game-thread jobs
+-- Changing the game's own state (Training settings, the dummy, game speed)
+-- from re.on_frame races the game's update on another thread. Jobs queued
+-- here run at the start of the game's own update instead (UpdateBehavior),
+-- or from the battle input hook if that entry isn't available.
+local Crumbs = require("combolab.crumbs")
+Game.jobs = {}
+Game.job_mode = nil
+local function drain_jobs()
+    if #Game.jobs > 0 then
+        local q = Game.jobs
+        Game.jobs = {}
+        for _, j in ipairs(q) do
+            if not j.quiet then Crumbs.add(j.label) end
+            local ok, err = pcall(j.fn)
+            if not ok then Game.last_error = j.label .. ": " .. tostring(err) end
+        end
+    end
+    -- a teleport keeps re-applying for a few frames until it sticks
+    if Game.pending_tp and Game.teleport_tick then
+        local ok, err = pcall(Game.teleport_tick)
+        if not ok then Game.last_error = "teleport: " .. tostring(err) end
+    end
+end
+Game.drain_jobs = drain_jobs
+if type(re) == "table" and re.on_pre_application_entry and not _G.COMBOLAB_NO_HOOK then
+    if pcall(re.on_pre_application_entry, "UpdateBehavior", drain_jobs) then Game.job_mode = "UpdateBehavior" end
+end
+-- run fn on the game's thread (soon); with no way to get there, run it now
+function Game.defer(label, fn, quiet)
+    if not Game.job_mode then
+        if not quiet then Crumbs.add(label) end
+        local ok, err = pcall(fn)
+        if not ok then Game.last_error = label .. ": " .. tostring(err) end
+        return
+    end
+    if #Game.jobs > 64 then table.remove(Game.jobs, 1) end
+    Game.jobs[#Game.jobs + 1] = { label = label, fn = fn, quiet = quiet }
+end
+
 -- per-game-frame tick: post-hook of cPlayer.pl_input_sub for the user's player
 local td_cPlayer = sdk.find_type_definition("nBattle.cPlayer")
 local m_input = td_cPlayer and td_cPlayer:get_method("pl_input_sub")
 Game.hook_ok = m_input ~= nil and not _G.COMBOLAB_NO_HOOK
 local hook_this = {}
 Game.hook_ticks = 0
+if Game.hook_ok and not Game.job_mode then Game.job_mode = "input hook" end
 if Game.hook_ok then
     sdk.hook(m_input,
         function(args)
@@ -286,6 +333,7 @@ if Game.hook_ok then
                     end
                 end
                 if addr and addr == addr_cache[Game.user] then
+                    if Game.job_mode == "input hook" then drain_jobs() end
                     last_hook_clock = os.clock()
                     Game.hook_ticks = Game.hook_ticks + 1     -- real battle frames only (speed test)
                     inject(players()[Game.user])

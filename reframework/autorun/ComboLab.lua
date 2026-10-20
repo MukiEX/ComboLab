@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.21.4"
+local VERSION = "1.22.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -17,6 +17,8 @@ local Game = require("combolab.game")
 local Overlay = require("combolab.overlay")
 local Bot = require("combolab.bot")
 local MoveData = require("combolab.movedata")
+local Crumbs = require("combolab.crumbs")
+Crumbs.init()
 local Predict = require("combolab.predict")
 local Speed = require("combolab.speed")
 local Dummy = require("combolab.dummy")
@@ -226,6 +228,25 @@ local function apply_no_hit(c, P)
     end
 end
 
+-- the dummy and Training settings a combo wants, set on the game's thread
+local function setup_combo_settings(c, why)
+    if not c then return end
+    local no_guard = S.bot and S.bot.running
+    Game.defer(string.format("%s: dummy and Training settings for %s", why or "combo", tostring(c.name or c.id)), function()
+        local ok, msg = pcall(Dummy.setup, c, { no_guard = no_guard })
+        if ok then L("%s", msg) else L("dummy setup failed: %s", tostring(msg)) end
+        local ok2, n = pcall(TS.apply_combo, c.training_settings)
+        if ok2 and n and n > 0 then L("training settings for this combo: %d set", n) end
+        status_dirty = true
+    end)
+end
+local function restore_combo_settings(why)
+    Game.defer((why or "restore") .. ": your own dummy and Training settings back", function()
+        pcall(Dummy.restore); pcall(TS.restore)
+        status_dirty = true
+    end)
+end
+
 local function load_combo(id)
     for _, e in ipairs(combos) do
         if e.id == id then
@@ -240,12 +261,7 @@ local function load_combo(id)
             S.last = nil
             load_session(c.id)
             facts_wanted = true
-            if cfg.auto_dummy and in_training then
-                local ok, msg = pcall(Dummy.setup, c, { no_guard = S.bot and S.bot.running })
-                if ok then L("%s", msg) end
-                local ok2, n = pcall(TS.apply_combo, c.training_settings)
-                if ok2 and n and n > 0 then L("training settings for this combo: %d set", n) end
-            end
+            if cfg.auto_dummy and in_training then setup_combo_settings(c, "load combo") end
             place.done, place.idle = false, 0
             cfg.combo_id = c.id
             save_cfg()
@@ -503,11 +519,8 @@ local function apply_options(o)
     for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows", "predict", "auto_place", "auto_dummy", "song_place" }) do
         if o[k] ~= nil then cfg[k] = o[k] == true end
     end
-    if was_auto_dummy and not cfg.auto_dummy then pcall(Dummy.restore); pcall(TS.restore) end
-    if cfg.auto_dummy and not was_auto_dummy and S.combo and in_training then
-        pcall(Dummy.setup, S.combo, {})
-        pcall(TS.apply_combo, S.combo.training_settings)
-    end
+    if was_auto_dummy and not cfg.auto_dummy then restore_combo_settings("option off") end
+    if cfg.auto_dummy and not was_auto_dummy and S.combo and in_training then setup_combo_settings(S.combo, "option on") end
     Profile.PREDICT = cfg.predict ~= false
     if S.profile then S.profile._win = {} end
     if o.train_view == "bar" or o.train_view == "notes" or o.train_view == "both" or o.train_view == "fix" or o.train_view == "aaa" then cfg.train_view = o.train_view end
@@ -590,19 +603,25 @@ local function handle_command(c)
         -- "Remember Training settings": the player then changes something in the menu
         if not in_training then flash("Go into Training mode first")
         else
-            local snap = TS.snapshot()
-            local n = 0
-            for _ in pairs(snap) do n = n + 1 end
-            S.tset = { snap = snap, snap_time = os.time(), snap_count = n }
-            flash(string.format("Remembered %d Training settings: change one in the menu, then press What changed?", n))
+            Game.defer("remember Training settings", function()
+                local snap = TS.snapshot()
+                local n = 0
+                for _ in pairs(snap) do n = n + 1 end
+                S.tset = { snap = snap, snap_time = os.time(), snap_count = n }
+                flash(string.format("Remembered %d Training settings: change one in the menu, then press What changed?", n))
+                status_dirty = true
+            end)
         end
     elseif cmd == "tset_diff" then
         if not (S.tset and S.tset.snap) then flash("Press Remember settings first")
         else
-            local ch = TS.diff(S.tset.snap, TS.snapshot())
-            S.tset.changes, S.tset.diff_time = {}, os.time()
-            for i = 1, math.min(#ch, 40) do S.tset.changes[i] = ch[i] end
-            flash(string.format("%d Training setting(s) changed", #ch))
+            Game.defer("compare Training settings", function()
+                local ch = TS.diff(S.tset.snap, TS.snapshot())
+                S.tset.changes, S.tset.diff_time = {}, os.time()
+                for i = 1, math.min(#ch, 40) do S.tset.changes[i] = ch[i] end
+                flash(string.format("%d Training setting(s) changed", #ch))
+                status_dirty = true
+            end)
         end
     elseif cmd == "speed_settings" then
         if tonumber(c.research_speed) then cfg.research_speed = math.max(1, math.min(8, tonumber(c.research_speed))) end
@@ -663,6 +682,8 @@ local function write_status()
         end)() or nil,
         speed = (function() local t = Speed.status(); t.research_speed = cfg.research_speed; t.speed_key = cfg.speed_key; return t end)(),
         error = last_error or Game.last_error,
+        crash = Crumbs.previous,        -- the game ended right after this (last session)
+        job_mode = Game.job_mode,
     }
     json.dump_file(DIR .. "status.json", st, 2)
 end
@@ -814,8 +835,13 @@ local function placement_tick()
 end
 
 Speed.log = function(m) L("speed: %s", m) end
+Speed.run = function(label, fn) Game.defer(label, fn) end
 if type(cfg.speed_results) == "table" then Speed.results = cfg.speed_results; Speed.base_fps = cfg.speed_base end
 local training_check = 0
+if Crumbs.previous then
+    L("last session: the game closed right after \"%s\" (before that: %s)", Crumbs.previous.what, table.concat(Crumbs.previous.recent or {}, " | "))
+end
+L("game-state changes run on: %s", tostring(Game.job_mode or "the render thread (no game hook)"))
 scan_combos()
 if cfg.combo_id then load_combo(cfg.combo_id) end
 S.tracker.opts.strict_ids = (S.mode == "train")
@@ -823,15 +849,13 @@ S.msg = nil
 
 re.on_frame(function()
     local now = os.clock()
+    Crumbs.beat()
     training_check = training_check - 1
     if training_check <= 0 then
         training_check = 60
         local was_training = in_training
         in_training = Game.in_training()
-        if in_training and not was_training and S.combo and cfg.auto_dummy then
-            pcall(Dummy.setup, S.combo, { no_guard = S.bot.running })
-            pcall(TS.apply_combo, S.combo.training_settings)
-        end
+        if in_training and not was_training and S.combo and cfg.auto_dummy then setup_combo_settings(S.combo, "entered Training") end
         if in_training then
             Game.user = cfg.user_side or 0
             local info = Game.side_info(Game.user)
@@ -875,7 +899,7 @@ re.on_frame(function()
     elseif Speed.active and not S.bot.running and not Speed.probe then
         Speed.restore()
     end
-    if S.bot_was_running and not S.bot.running then pcall(Dummy.restore_guard) end
+    if S.bot_was_running and not S.bot.running then Game.defer("bot stopped: guard back", function() pcall(Dummy.restore_guard) end) end
     S.bot_was_running = S.bot.running
     -- song mode: back to the start position at each count-in
     if cfg.song_place and S.song_seq and S.song_seq ~= S.song_placed and in_training and not S.bot.running then
@@ -902,7 +926,7 @@ re.on_frame(function()
         local ok, err = pcall(poll_commands)
         if not ok then last_error = tostring(err) end
     end
-    Game.teleport_tick()
+    if not Game.job_mode then Game.teleport_tick() end     -- otherwise it runs on the game's thread
     pcall(placement_tick)
     if facts_wanted and in_training and fighter_id and S.profile then
         facts_wanted = false

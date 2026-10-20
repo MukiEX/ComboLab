@@ -176,6 +176,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
     <span class="pill" id="pillActive"><span>Nothing loaded in game</span></span>
     <span class="pill" id="pillHub" hidden></span>
     <span class="pill" id="pillUpd" hidden style="cursor:pointer"><span class="dot warn"></span><span>Update available</span></span>
+    <span class="pill" id="pillCrash" hidden style="cursor:pointer" title=""></span>
   </div>
 </header>
 
@@ -537,7 +538,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.21.4";
+const PAGE_VERSION = "1.22.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -993,6 +994,14 @@ function renderHeaderStatus() {
   const live = age < 12;
   pg.innerHTML = `<span class="dot ${live ? (s.in_training ? "on" : "warn") : "off"}"></span><span>${live ? (s.in_training ? "Game: in Training" : "Game: running (not in Training)") : "Game: not running"}${s.version ? " · mod v" + esc(s.version) : ""}${s.version && s.version !== PAGE_VERSION ? ` <b style="color:var(--warning)">(page is v${PAGE_VERSION}: update the mod files)</b>` : ""}</span>`;
   const c = s.combo_id && st.combos[s.combo_id];
+  // the game ended right after the mod touched something (crumbs.json): say what, until dismissed
+  const cr = $("pillCrash"), k = s.crash && String(s.crash.t || "");
+  cr.hidden = !(k && LS.get("crash_seen") !== k);
+  if (!cr.hidden) {
+    cr.innerHTML = `<span class="dot warn"></span><span>Last time the game closed right after: ${esc(s.crash.what)}</span>`;
+    cr.title = "The last things ComboLab did before the game closed:\n" + arr(s.crash.recent).join("\n") + "\n\nIf the game crashed, send this along with re2_framework_log.txt. Click to dismiss.";
+    cr.onclick = () => { LS.set("crash_seen", k); cr.hidden = true; };
+  }
   pa.innerHTML = c ? `<span>${s.mode === "train" ? "TRAINING" : "PROFILING"} · ${esc(c.name || c.id)}${s.opp_fighter_id ? ` · vs ${esc(FIGHTERS[s.opp_fighter_id] || "#" + s.opp_fighter_id)}` : ""}</span>` : `<span>Nothing loaded in game</span>`;
 }
 

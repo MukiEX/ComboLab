@@ -146,6 +146,7 @@ local function frame()
         h.pre({ [2] = 1000 }); h.post(0)
         h.pre({ [2] = 2000 }); h.post(0)
     end
+    E.x, E.ox = P0.pos.x.v / 65536, P1.pos.x.v / 65536    -- (teleports now land inside the game's update)
     local raw = P0.pl_input_new & 15
     Toy.engine_step(E, P0.pl_sw_new & ~15, DIRS[raw] or 5)
     P0.pos.x.v = math.floor(E.x * 65536)
