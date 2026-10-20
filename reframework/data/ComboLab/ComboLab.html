@@ -240,6 +240,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
           <label class="switch"><input type="checkbox" id="optPredict" checked> Predict windows from frame data</label>
           <label class="switch"><input type="checkbox" id="optPlace" checked> Corner combos: place fighters in the corner</label>
           <label class="switch"><input type="checkbox" id="optDetail"> Detail table in game</label>
+          <label class="switch"><input type="checkbox" id="optDetailKey" checked> F7 toggles the detail table</label>
           <label class="switch"><input type="checkbox" id="optIgnoreSpam" checked> Ignore spammed samples</label>
           <label class="switch"><input type="checkbox" id="optAutoDummy" checked> Set the dummy and Training settings for each combo <span class="muted">(counter hit, stance, saved settings; no guard while the bot runs)</span></label>
         </div>
@@ -539,7 +540,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.22.1";
+const PAGE_VERSION = "1.22.2";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1218,7 +1219,7 @@ async function sendCommand(cmd) {
 
 function optionsFromForm() {
   return {
-    spam_block: $("optSpam").checked, learn_in_train: $("optLearn").checked, show_detail: $("optDetail").checked,
+    spam_block: $("optSpam").checked, learn_in_train: $("optLearn").checked, show_detail: $("optDetail").checked, detail_key: $("optDetailKey").checked,
     ignore_spam_samples: $("optIgnoreSpam").checked, user_side: $("optP2").checked ? 1 : 0,
     scale: +$("optScale").value, text_scale: +$("optTextScale").value, y: +$("optY").value,
     rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked, predict: $("optPredict").checked, auto_place: $("optPlace").checked,
@@ -1232,7 +1233,7 @@ function optionsFromForm() {
 function optionsToForm(o) {
   if (!o) return;
   $("optSpam").checked = !!o.spam_block; $("optLearn").checked = !!o.learn_in_train;
-  $("optDetail").checked = !!o.show_detail; $("optIgnoreSpam").checked = o.ignore_spam_samples !== false;
+  $("optDetail").checked = !!o.show_detail; $("optDetailKey").checked = o.detail_key !== false; $("optIgnoreSpam").checked = o.ignore_spam_samples !== false;
   $("optP2").checked = o.user_side === 1;
   $("optRhythm").checked = o.rhythm !== false; $("optDemo").checked = o.rhythm_demo !== false; $("optPredict").checked = o.predict !== false; $("optPlace").checked = o.auto_place !== false;
   if (o.train_view) $("optView").value = o.train_view;

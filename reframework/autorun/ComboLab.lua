@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.22.1"
+local VERSION = "1.22.2"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -35,7 +35,8 @@ local DEFAULTS = {
     combo_id = nil,
     spam_block = false,
     learn_in_train = false,
-    show_detail = true,
+    show_detail = false,      -- the Develop detail table (F7)
+    detail_key = true,        -- F7 toggles it
     train_view = "bar",       -- Train view: "bar" | "notes" (Spearmint Twintails) | "both" | "fix" (Strike Fixation) | "aaa" (Apple Addict Attack)
     fix_pos = "center",       -- Strike Fixation lanes: "left" | "center" | "right"
     note_approach = 36,        -- note flight time in frames
@@ -75,7 +76,10 @@ local function load_cfg()
     if next(c) ~= nil and (tonumber(c.defaults_rev) or 1) < 2 then
         c.motion_arrows, c.song_mode = true, true
     end
-    c.defaults_rev = 2
+    if next(c) ~= nil and (tonumber(c.defaults_rev) or 1) < 3 then
+        c.show_detail = false            -- the detail table is off by default now (F7 or the options bring it back)
+    end
+    c.defaults_rev = 3
     for k, v in pairs(DEFAULTS) do
         if c[k] == nil then c[k] = v end
     end
@@ -517,7 +521,7 @@ local last_poll, last_status = 0, 0
 local function apply_options(o)
     if type(o) ~= "table" then return end
     local was_auto_dummy = cfg.auto_dummy
-    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows", "predict", "auto_place", "auto_dummy", "song_place" }) do
+    for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows", "predict", "auto_place", "auto_dummy", "song_place", "detail_key" }) do
         if o[k] ~= nil then cfg[k] = o[k] == true end
     end
     if was_auto_dummy and not cfg.auto_dummy then restore_combo_settings("option off") end
@@ -664,7 +668,7 @@ local function write_status()
         stats = S.stats,
         last = S.last and compact(S.last) or nil,
         options = {
-            spam_block = cfg.spam_block, learn_in_train = cfg.learn_in_train, show_detail = cfg.show_detail,
+            spam_block = cfg.spam_block, learn_in_train = cfg.learn_in_train, show_detail = cfg.show_detail, detail_key = cfg.detail_key ~= false,
             ignore_spam_samples = cfg.ignore_spam_samples, scale = cfg.scale, text_scale = cfg.text_scale, y = cfg.y,
             user_side = cfg.user_side, overlay = cfg.overlay, enabled = cfg.enabled,
             rhythm = cfg.rhythm, rhythm_demo = cfg.rhythm_demo,
@@ -711,7 +715,7 @@ local function do_hotkeys()
     local k = cfg.keys
     if pressed(k.mode) then set_mode(S.mode == "develop" and "train" or "develop") end
     if pressed(k.next) then cycle_combo(1) end
-    if pressed(k.detail) then cfg.show_detail = not cfg.show_detail; save_cfg() end
+    if pressed(k.detail) and cfg.detail_key ~= false then cfg.show_detail = not cfg.show_detail; save_cfg() end
     if pressed(k.spam) then
         cfg.spam_block = not cfg.spam_block; save_cfg()
         flash(cfg.spam_block and "Spam blocker ON" or "Spam blocker OFF")
@@ -1048,6 +1052,8 @@ re.on_draw_ui(function()
     changed, v = imgui.checkbox("Cadence preview between attempts", cfg.rhythm_demo ~= false); if changed then cfg.rhythm_demo = v; save_cfg() end
     changed, v = imgui.checkbox("Keep learning in Train", cfg.learn_in_train); if changed then cfg.learn_in_train = v; save_cfg() end
     changed, v = imgui.checkbox("Detail table (F7)", cfg.show_detail); if changed then cfg.show_detail = v; save_cfg() end
+    imgui.same_line()
+    changed, v = imgui.checkbox("F7 toggles it", cfg.detail_key ~= false); if changed then cfg.detail_key = v; save_cfg() end
     changed, v = imgui.checkbox("Ignore spammed samples in windows", cfg.ignore_spam_samples)
     if changed then apply_options({ ignore_spam_samples = v }) end
     changed, v = imgui.checkbox("I'm on the 2P side", cfg.user_side == 1)

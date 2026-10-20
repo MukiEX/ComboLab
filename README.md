@@ -220,7 +220,7 @@ Three tabs along the top:
 |---|---|
 | F5 | Profiling (Develop) / Training (Train) |
 | F6 | next combo |
-| F7 | detail table (Develop) |
+| F7 | detail table (Develop; off by default, and F7 can be switched off in the options) |
 | F8 | spam blocker |
 | F9 | hide overlay |
 | F10 | research bot (current combo) |
