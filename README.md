@@ -201,6 +201,15 @@ Three tabs along the top:
      - **Window:** the cyan bracket around each row is that step's press window.
      - **Feedback:** receptors flash with the judgement, and a combo counter counts up.
      - The lanes can sit left, centre or right of the screen (session options).
+   - **Apple Addict Attack view** (Train view dropdown, or F11 to cycle): an Ongeki-style highway seen in perspective. Notes come down toward the judgement line and land on each step's target frame.
+     - **Lanes:** LP, MP and HP on the left, LK, MK and HK on the right, in SF6's colours (light blue, medium yellow, heavy red).
+     - **Walls:** the orange left wall is Drive Rush and Parry, the right wall is Drive Impact, and supers light both.
+     - **Two-button notes:** an OD (`PP` / `KK`) is one bar across two lanes, and a throw is a note on each side. Held buttons (`236[PP]`) have a tail.
+     - **Lever rail:** the purple rail is the stick (back on the left, neutral in the middle, forward on the right), with big green arrows for each direction of a motion. An arrow that crosses a button note turns into an outline so both stay readable. A charge (`[4]6`) is a thick segment held at the back.
+     - **Apple:** the red apple on the judgement line follows your stick.
+     - **Window:** the cyan box behind a note is its press window, and the brighter band is the sweet spot.
+     - **HUD:** SWEET / GOOD / DROP counts for this combo, your clean-run streak, and the dummy as the "enemy" with the combo's hits and damage.
+     - "Lane position" (left / centre / right) applies here too.
    - **Song mode** (on by default; Train, any view): instead of starting when your first hit lands, a count-in plays (3, 2, 1) and step 1 gets its own note on the downbeat. The rest of the combo follows on a fixed timeline at its ideal cadence (each step's target frame plus its usual startup), with notes visible from further out (80 frames by default). After each attempt it re-arms when you're idle. If the first note goes by untouched, or two notes in a row do, it restarts with a new count-in. **Follow my hits** re-times the remaining notes from the moves that actually come out, so the guide stays exact if you're early or late on one step. In bar view the playhead is larger and brighter, starts in a count-in section in front of step 1 (its beat ticks light up 3, 2, 1) and reaches step 1 on the downbeat, then runs along the bar following the song.
    - **Rhythm guide:** once a step's move starts, a glowing playhead runs through the next segment in real game frames and flashes on the middle of the window (white notches mark it). Between attempts a dimmer playhead loops the whole combo's cadence: each step's mid-window press plus that move's usual press-to-startup delay. Both can be switched off in the session options.
 

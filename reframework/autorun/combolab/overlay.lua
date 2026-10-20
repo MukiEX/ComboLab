@@ -966,6 +966,488 @@ function Overlay.fixation(S, W, H, sc, top)
 end
 
 -- --------------------------------------------------------------------------
+-- "Apple Addict Attack" view (Train): an Ongeki-style highway seen in
+-- perspective. Plane, left to right (plane units):
+--   [wall 24][LP][MP][HP] | [LK][MK][HK][wall 24]     lanes 56 wide, 384 in all
+-- Left wall = Drive Rush / Parry, right wall = Drive Impact, both = supers.
+-- A purple lever rail runs up the highway (back = left, neutral = middle,
+-- forward = right) carrying big green arrows for stick motions; an arrow that
+-- crosses a button note is drawn as an outline so both stay readable. The red
+-- apple on the judgement line follows the stick.
+-- --------------------------------------------------------------------------
+local AAA = {
+    L = rgba(59, 155, 246), M = rgba(250, 204, 21), H = rgba(239, 68, 68),
+    wall = rgba(255, 159, 28), wall_bg = rgba(42, 24, 6, 230),
+    floor = rgba(8, 11, 20, 215), sep = rgba(34, 43, 64), divider = rgba(148, 163, 184),
+    rail = rgba(217, 70, 239), charge = rgba(126, 34, 206),
+    arrow = rgba(34, 197, 94), arrow_dark = rgba(5, 46, 22), arrow_hi = rgba(187, 247, 208), arrow_ol = rgba(74, 222, 128),
+    win = rgba(14, 58, 74, 200), win_edge = rgba(34, 211, 238), sweet = rgba(21, 94, 117, 235),
+    apple = rgba(225, 29, 72), leaf = rgba(34, 197, 94), title = rgba(250, 204, 21),
+    SWEET = rgba(253, 230, 138), GOOD = rgba(94, 234, 212), EARLY = rgba(147, 197, 253), LATE = rgba(251, 146, 60), DROP = rgba(248, 113, 113),
+    enemy = rgba(249, 115, 22), panel = rgba(22, 30, 48, 220),
+}
+local AAA_PLANE = 384
+local AAA_LANE_U = { LP = 52, MP = 108, HP = 164, LK = 220, MK = 276, HK = 332 }
+local AAA_LEVER = { back = 52, neutral = 192, forward = 332 }
+
+-- what kind of judgement a judge_log text is
+local function aaa_kind(text)
+    text = tostring(text or "")
+    if text == "SWEET" then return "SWEET" end
+    if text == "GOOD" then return "GOOD" end
+    if text:find("^EARLY") then return "EARLY" end
+    if text:find("^LATE %+") then return "LATE" end
+    return "DROP"
+end
+Overlay.aaa_kind = aaa_kind
+
+local function lever_of(d)
+    d = tonumber(d) or 5
+    if d == 1 or d == 4 or d == 7 then return AAA_LEVER.back end
+    if d == 3 or d == 6 or d == 9 then return AAA_LEVER.forward end
+    return AAA_LEVER.neutral
+end
+
+-- What a step asks for on the highway:
+--   taps = { "LP", ... }  bars = { { "LP", "MP" } }  walls = { left, right }
+--   arrows = { "2", "3", "6" }  charge = "4" | nil  hold = bool
+local aaa_cache = {}
+function Overlay.aaa_need(label, step)
+    label = tostring(label or "")
+    local key = label .. "|" .. tostring(step and step.trigger and step.trigger.type or "")
+    if aaa_cache[key] then return aaa_cache[key] end
+    local jump = label:match("^[Jj]%.") ~= nil
+    local r = Overlay.fix_lanes(jump and label:sub(3) or label)       -- "j.HP": the button is what's pressed
+    local up = label:upper()
+    local need = { taps = {}, bars = {}, walls = {}, arrows = {}, hold = false, jump = jump }
+    local function tap(n) for _, t in ipairs(need.taps) do if t == n then return end end need.taps[#need.taps + 1] = n end
+    if up == "DR" or up == "PARRY" then need.walls.left = true end
+    if up == "DI" then need.walls.right = true end
+    if up == "THROW" then tap("LP"); tap("LK") end
+    if r.mtext and (r.mtext:find("^SA") or r.mtext:find("^CA") or r.mtext:find("^LVL") or r.mtext:find("SP")) then
+        need.walls.left, need.walls.right = true, true
+    end
+    if step and step.trigger and step.trigger.type == "rawdr" then
+        need.walls.left = true
+        need.arrows = { "6", "6" }
+    end
+    local named = (up == "DR" or up == "PARRY" or up == "DI" or up == "THROW")
+    for _, l in ipairs(LANES) do
+        local v = (not named) and r[l]
+        if v then
+            if v:find("P") then tap(l .. "P") end
+            if v:find("K") then tap(l .. "K") end
+            if v == "•" then tap(l .. "P") end          -- Modern L / M / H
+        end
+    end
+    local any = r.any or ""
+    if any:find("PP") then need.bars[#need.bars + 1] = { "LP", "MP" }; any = any:gsub("PP", "", 1) end
+    if any:find("KK") then need.bars[#need.bars + 1] = { "LK", "MK" }; any = any:gsub("KK", "", 1) end
+    if any:find("AUTO") then need.bars[#need.bars + 1] = { "LP", "HK" }; any = any:gsub("AUTO", "", 1) end
+    if any:find("P") then need.bars[#need.bars + 1] = { "LP", "HP" } end
+    if any:find("K") then need.bars[#need.bars + 1] = { "LK", "HK" } end
+    need.hold = label:find("%[[LMH]?[PK][PK]?%]") ~= nil
+    -- motion: arrows, and a charge "[4]6"
+    if r.parts then
+        local i = 1
+        local parts = r.parts
+        while i <= #parts do
+            local p = parts[i]
+            if p.t == "text" and p.s == "[" and parts[i + 1] and parts[i + 1].t == "motion" then
+                need.charge = parts[i + 1].seq:sub(1, 1)
+                i = i + 3
+            elseif p.t == "motion" then
+                for d in tostring(p.seq):gmatch("%d") do if d ~= "5" then need.arrows[#need.arrows + 1] = d end end
+                i = i + 1
+            elseif p.t == "circle" then
+                for _, d in ipairs({ "6", "3", "2", "1", "4" }) do need.arrows[#need.arrows + 1] = d end
+                i = i + 1
+            else
+                i = i + 1
+            end
+        end
+    end
+    aaa_cache[key] = need
+    return need
+end
+
+-- big chunky arrow (40x40 box, pointing right), rotated to numpad direction d
+local AR_OUT = { 3, 13, 19, 13, 19, 3, 38, 20, 19, 37, 19, 27, 3, 27, 3, 13 }
+local AR_HI = { 7, 17, 23, 17, 23, 11, 32, 20 }
+local AR_ANG = { ["6"] = 0, ["3"] = 1, ["2"] = 2, ["1"] = 3, ["4"] = 4, ["7"] = 5, ["8"] = 6, ["9"] = 7 }
+local function aaa_arrow(d, cx, cy, size, outline, alpha)
+    local a = (AR_ANG[tostring(d)] or 0) * math.pi / 4
+    local ca, sa = math.cos(a), math.sin(a)
+    local z = size / 40
+    local function tr(src)
+        local out = {}
+        for i = 1, #src, 2 do
+            local x, y = src[i] - 20, src[i + 1] - 20
+            out[i] = cx + (x * ca - y * sa) * z
+            out[i + 1] = cy + (x * sa + y * ca) * z
+        end
+        return out
+    end
+    local o = tr(AR_OUT)
+    if outline then
+        stroke(o, 8 * z, with_alpha(AAA.arrow_dark, alpha))
+        stroke(o, 4 * z, with_alpha(AAA.arrow_ol, alpha))
+        return
+    end
+    stroke(o, 3.5 * z, with_alpha(AAA.arrow_dark, alpha))
+    local col = with_alpha(AAA.arrow, alpha)
+    -- shaft (3,13)-(19,27) and head (19,3)(38,20)(19,37)
+    draw.filled_quad(o[1], o[2], o[3], o[4], o[11], o[12], o[13], o[14], col)
+    draw.filled_quad(o[5], o[6], o[7], o[8], o[9], o[10], (o[5] + o[9]) / 2, (o[6] + o[10]) / 2, col)
+    stroke(tr(AR_HI), 2.5 * z, with_alpha(AAA.arrow_hi, alpha * 0.9))
+end
+Overlay.aaa_arrow = aaa_arrow
+
+local function aaa_apple(x, y, r)
+    draw.filled_circle(x, y + r * 0.15, r * 1.25, rgba(0, 0, 0, 120), 24)
+    draw.filled_circle(x - r * 0.38, y, r * 0.78, AAA.apple, 24)
+    draw.filled_circle(x + r * 0.38, y, r * 0.78, AAA.apple, 24)
+    draw.filled_circle(x, y + r * 0.22, r * 0.85, AAA.apple, 24)
+    draw.filled_circle(x - r * 0.42, y - r * 0.22, r * 0.2, rgba(255, 190, 205, 220), 12)
+    draw.line(x, y - r * 0.55, x + r * 0.12, y - r * 1.05, rgba(110, 60, 20), math.max(2, r * 0.16))
+    draw.filled_quad(x + r * 0.1, y - r * 0.8, x + r * 0.55, y - r * 1.15, x + r * 0.95, y - r * 1.0, x + r * 0.5, y - r * 0.7, AAA.leaf)
+end
+
+local function aaa_hex(cx, cy, r, col)
+    local p = {}
+    for i = 0, 5 do
+        local a = i * math.pi / 3
+        p[#p + 1] = cx + math.cos(a) * r; p[#p + 1] = cy + math.sin(a) * r
+    end
+    draw.filled_quad(p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], col)
+    draw.filled_quad(p[7], p[8], p[9], p[10], p[11], p[12], p[1], p[2], col)
+end
+
+-- session tallies (reset when the combo changes)
+local aaa_tally = { key = nil, SWEET = 0, GOOD = 0, DROP = 0, seen = {} }
+
+function Overlay.apple(S, W, H, sc, top)
+    local P, combo, cfg = S.profile, S.combo, S.cfg
+    local steps = combo.steps
+    local N = #steps
+    local labels = {}
+    local live = S.tracker:live_detail()
+    local now = S.tracker:now() or 0
+    local fnow = Overlay.ftime(S, now)
+    local clock = os.clock()
+    local T, first, A = Overlay.timeline(S, live, fnow)
+    A = math.max(10, A)
+
+    -- tallies from the judgement log
+    local ck = tostring(combo.id or combo.name or "")
+    if aaa_tally.key ~= ck then aaa_tally = { key = ck, SWEET = 0, GOOD = 0, DROP = 0, seen = {} } end
+    for id, e in pairs(judge_log) do
+        if id ~= "_last" and type(e) == "table" and not aaa_tally.seen[e] then
+            aaa_tally.seen[e] = true
+            local k = aaa_kind(e.text)
+            if k == "SWEET" then aaa_tally.SWEET = aaa_tally.SWEET + 1
+            elseif k == "DROP" then aaa_tally.DROP = aaa_tally.DROP + 1
+            else aaa_tally.GOOD = aaa_tally.GOOD + 1 end
+        end
+    end
+
+    -- geometry: plane units -> screen
+    local k = 1.2 * sc                                   -- pixels per plane unit at the line
+    local NW = AAA_PLANE * k
+    local Hp = math.min(H * 0.62, 600 * sc)
+    local F = 1.1                                        -- depth: the far end is 1/(1+F) as wide
+    local s1 = 1 / (1 + F)
+    local pos = cfg.fix_pos
+    local cx = (pos == "left" and (W * 0.05 + NW / 2)) or (pos == "right" and (W * 0.95 - NW / 2)) or W / 2
+    local yb = top + Hp
+    local function proj(u, t)
+        local s = 1 / (1 + math.max(-0.3, t) * F)
+        return cx + (u - AAA_PLANE / 2) * k * s, yb - Hp * (1 - s) / (1 - s1), s
+    end
+    local function tt(frame) return (frame - fnow) / A end
+    local function quad(u0, u1, t0, t1, col)
+        local ax, ay = proj(u0, t0)
+        local bx, by = proj(u1, t0)
+        local cx2, cy2 = proj(u1, t1)
+        local dx, dy = proj(u0, t1)
+        draw.filled_quad(ax, ay, bx, by, cx2, cy2, dx, dy, col)
+    end
+    local TMIN = -0.08
+
+    -- floor, walls, lanes
+    quad(0, AAA_PLANE, TMIN, 1, AAA.floor)
+    quad(0, 24, TMIN, 1, AAA.wall_bg)
+    quad(AAA_PLANE - 24, AAA_PLANE, TMIN, 1, AAA.wall_bg)
+    quad(-2, 0, TMIN, 1, AAA.wall)
+    quad(AAA_PLANE, AAA_PLANE + 2, TMIN, 1, AAA.wall)
+    for i = 0, 5 do
+        local u0 = 24 + i * 56
+        local n = ({ "L", "M", "H" })[(i % 3) + 1]
+        quad(u0 + 26.5, u0 + 29.5, TMIN, 1, with_alpha(AAA[n], 0.22))
+        if i < 5 and i ~= 2 then quad(u0 + 55.5, u0 + 56.5, TMIN, 1, AAA.sep) end
+    end
+    quad(190, 194, TMIN, 1, with_alpha(AAA.divider, 0.8))
+
+    -- beat lines (song mode)
+    if S.song and S.song.B then
+        local B = S.song.B
+        local k0 = math.ceil((fnow - S.song.t0) / B)
+        for b = k0, k0 + math.ceil(A / B) + 1 do
+            local t = tt(S.song.t0 + b * B)
+            if t > 0 and t < 1 then quad(0, AAA_PLANE, t, t + 0.004, rgba(60, 72, 104, 200)) end
+        end
+    end
+
+    -- next step
+    local nxt
+    for j = first, N do if T[j] and T[j] > fnow - 6 then nxt = j break end end
+
+    -- collect what's on screen
+    local DT = 0.03                                     -- note thickness (fraction of the highway)
+    local GAP = 0.085 * A                               -- frames between arrows of one motion (at most)
+    local items = {}
+    for j = first, N do
+        local Tj = T[j]
+        if Tj then
+            local t = tt(Tj)
+            local need = Overlay.aaa_need(steps[j].label, steps[j])
+            local n = #need.arrows
+            -- squeeze the motion into the time since the previous step
+            local room = (j > 1 and T[j - 1]) and (Tj - T[j - 1]) or A
+            local gap = (n > 1) and math.min(GAP, math.max(1, room * 0.75 / (n - 1 + (need.charge and 1 or 0)))) or GAP
+            local clen = need.charge and math.min(A * 0.3, math.max(gap, room * 0.6 - (n - 1) * gap)) or 0
+            local lead = (n > 0 and (n - 1) * gap or 0) + clen
+            if t - lead / A < 1.05 and t > TMIN - 0.15 then
+                items[#items + 1] = { j = j, T = Tj, t = t, need = need, gap = gap, clen = clen }
+            end
+        end
+    end
+
+    -- press windows behind the notes
+    for _, it in ipairs(items) do
+        local w = it.j >= 2 and P:window(it.j) or nil
+        if w and w.E and w.L and w.mid and it.t > 0.02 then
+            local need = it.need
+            local u0, u1 = 24, AAA_PLANE - 24
+            local lo, hi = math.huge, -math.huge
+            for _, l in ipairs(need.taps) do lo = math.min(lo, AAA_LANE_U[l] - 28); hi = math.max(hi, AAA_LANE_U[l] + 28) end
+            for _, b in ipairs(need.bars) do lo = math.min(lo, AAA_LANE_U[b[1]] - 28); hi = math.max(hi, AAA_LANE_U[b[2]] + 28) end
+            if lo < hi then u0, u1 = lo + 2, hi - 2 end
+            local t0, t1 = tt(it.T - (w.mid - w.E)), math.min(1, tt(it.T + (w.L - w.mid) + 1))
+            local cur = it.j == nxt
+            if t0 < 1 then
+            quad(u0 - 1.5, u1 + 1.5, t0, t1, with_alpha(AAA.win_edge, cur and 0.9 or 0.45))
+            quad(u0, u1, t0 + 0.003, t1 - 0.003, with_alpha(AAA.win, cur and 1 or 0.6))
+            if w.sweet_lo then
+                local s0, s1 = tt(it.T + w.sweet_lo - w.mid), math.min(1, tt(it.T + w.sweet_hi - w.mid + 1))
+                if s0 < s1 then quad(u0, u1, s0, s1, with_alpha(AAA.sweet, cur and 1 or 0.6)) end
+            end
+            end
+        end
+    end
+
+    -- lever rail: neutral, bending out for motions and charges
+    local pts = { { f = fnow + TMIN * A, u = AAA_LEVER.neutral } }
+    local charges = {}
+    local function add_pt(f, u)
+        -- a later step's motion cuts off what's left of the one before it
+        while #pts > 1 and pts[#pts].f >= f do pts[#pts] = nil end
+        pts[#pts + 1] = { f = f, u = u }
+    end
+    for _, it in ipairs(items) do
+        local need = it.need
+        local n = #need.arrows
+        local gap = it.gap
+        if n > 0 or need.charge then
+            local t_first = it.T - (n > 0 and (n - 1) * gap or 0)
+            if need.charge then
+                local c0, c1 = t_first - it.clen, t_first - gap * 0.6
+                add_pt(c0 - 1.5, AAA_LEVER.neutral)
+                add_pt(c0, lever_of(need.charge))
+                add_pt(c1, lever_of(need.charge))
+                charges[#charges + 1] = { c0, c1, lever_of(need.charge) }
+            else
+                add_pt(t_first - gap * 0.6, AAA_LEVER.neutral)
+            end
+            for i, d in ipairs(need.arrows) do
+                add_pt(it.T - (n - i) * gap, lever_of(d))
+            end
+            add_pt(it.T + gap * 0.4, n > 0 and lever_of(need.arrows[n]) or AAA_LEVER.neutral)
+            add_pt(it.T + gap * 0.9, AAA_LEVER.neutral)
+        end
+    end
+    if pts[#pts].f < fnow + A then pts[#pts + 1] = { f = fnow + A * 1.05, u = pts[#pts].u } end
+    local poly = {}
+    for i, p in ipairs(pts) do
+        local t = tt(p.f)
+        local u = p.u
+        if t > 1 then
+            -- clip the segment at the far end of the highway
+            local q = pts[i - 1]
+            if q then
+                local tq = tt(q.f)
+                local r = (1 - tq) / math.max(1e-6, t - tq)
+                u = q.u + (p.u - q.u) * r
+            end
+            t = 1
+        end
+        local x, y = proj(u, math.max(TMIN, t))
+        poly[#poly + 1] = x; poly[#poly + 1] = y
+        if t >= 1 then break end
+    end
+    stroke(poly, 6 * k, with_alpha(AAA.rail, 0.9))
+    for _, c in ipairs(charges) do
+        local t0, t1 = math.max(TMIN, tt(c[1])), math.min(1, tt(c[2]))
+        if t1 > t0 then quad(c[3] - 9, c[3] + 9, t0, t1, with_alpha(AAA.charge, 0.95)) end
+    end
+
+    -- notes, far to near
+    local busy = {}       -- button notes by time, for the arrow outline rule
+    table.sort(items, function(a, b) return a.T > b.T end)
+    for _, it in ipairs(items) do
+        local need, t = it.need, it.t
+        if t > TMIN and t < 1.02 then
+            local cur = it.j == nxt
+            local fade = t < 0 and math.max(0, 1 + t / -TMIN) or 1
+            local bright = (cur and 1 or 0.8) * fade
+            local function note(u0, u1, col)
+                if need.hold then quad(u0 + 8, u1 - 8, t, math.min(1, t + 0.18), with_alpha(col, 0.35 * bright)) end
+                quad(u0 - 2, u1 + 2, t - DT / 2 - 0.004, t + DT / 2 + 0.004, with_alpha(rgba(5, 8, 14), 0.9 * fade))
+                quad(u0, u1, t - DT / 2, t + DT / 2, with_alpha(col, bright))
+                quad(u0 + 3, u1 - 3, t + DT / 2 - 0.007, t + DT / 2 - 0.003, with_alpha(rgba(255, 255, 255), 0.55 * bright))
+                busy[#busy + 1] = { T = it.T, u0 = u0, u1 = u1 }
+            end
+            for _, l in ipairs(need.taps) do
+                local u = AAA_LANE_U[l]
+                note(u - 25, u + 25, AAA[l:sub(1, 1)])
+            end
+            for _, b in ipairs(need.bars) do
+                local u0, u1 = AAA_LANE_U[b[1]] - 25, AAA_LANE_U[b[2]] + 25
+                local c0, c1 = AAA[b[1]:sub(1, 1)], AAA[b[2]:sub(1, 1)]
+                note(u0, (u0 + u1) / 2, c0)
+                note((u0 + u1) / 2, u1, c1)
+            end
+            if need.walls.left then
+                quad(2, 22, t - DT, t + DT, with_alpha(AAA.wall, bright))
+                quad(-6, 0, t - DT * 1.5, t + DT * 1.5, with_alpha(AAA.wall, 0.6 * bright))
+            end
+            if need.walls.right then
+                quad(AAA_PLANE - 22, AAA_PLANE - 2, t - DT, t + DT, with_alpha(AAA.wall, bright))
+                quad(AAA_PLANE, AAA_PLANE + 6, t - DT * 1.5, t + DT * 1.5, with_alpha(AAA.wall, 0.6 * bright))
+            end
+            -- the next step's label, beside the highway
+            if cur and t > 0.02 then
+                local x, y = proj(AAA_PLANE + 14, t)
+                labels[#labels + 1] = { x = x + 70 * sc, y = y, text = steps[it.j].label, col = rgba(241, 245, 249, 230), size = 24, step = true }
+            end
+        end
+    end
+
+    -- arrows on the rail, far to near, on top of the notes
+    local arrows = {}
+    for _, it in ipairs(items) do
+        local n = #it.need.arrows
+        for i, d in ipairs(it.need.arrows) do
+            arrows[#arrows + 1] = { f = it.T - (n - i) * it.gap, d = d, cur = it.j == nxt, squeeze = math.max(0.55, math.min(1, it.gap / GAP)) }
+        end
+    end
+    table.sort(arrows, function(a, b) return a.f > b.f end)
+    for _, a in ipairs(arrows) do
+        local t = tt(a.f)
+        if t > TMIN and t < 1.02 then
+            local u = lever_of(a.d)
+            local x, y, s = proj(u, t)
+            local size = 46 * k * s * a.squeeze
+            local outline = false
+            for _, b in ipairs(busy) do
+                if math.abs(b.T - a.f) <= 1.5 and u + 23 > b.u0 and u - 23 < b.u1 then outline = true break end
+            end
+            local fade = t < 0 and math.max(0, 1 + t / -TMIN) or 1
+            aaa_arrow(a.d, x, y - size * 0.15, size, outline, fade * (a.cur and 1 or 0.85))
+        end
+    end
+
+    -- judgement line and receptors
+    do
+        local jl = judge_log._last
+        local flash = (jl and clock - jl.t < 0.25) and (1 - (clock - jl.t) / 0.25) or 0
+        quad(0, AAA_PLANE, -0.012, 0.012, rgba(255, 255, 255, 60 + math.floor(140 * flash)))
+        quad(0, AAA_PLANE, -0.004, 0.004, rgba(255, 255, 255, 230))
+        for l, u in pairs(AAA_LANE_U) do quad(u - 25, u + 25, -0.006, 0.006, with_alpha(AAA[l:sub(1, 1)], 0.8)) end
+    end
+
+    -- the apple follows the stick
+    do
+        local d = S.stick_dir or 5
+        local u = lever_of(d)
+        local x, y = proj(u, 0)
+        if d == 7 or d == 8 or d == 9 then y = y - 10 * sc elseif d == 1 or d == 2 or d == 3 then y = y + 6 * sc end
+        aaa_apple(x, y, 15 * sc)
+    end
+
+    -- judgement text
+    local jl = judge_log._last
+    if jl and clock - jl.t < 0.8 then
+        local a = 1 - (clock - jl.t) / 0.8
+        local _, y = proj(AAA_PLANE / 2, 0.22)
+        labels[#labels + 1] = { x = cx, y = y - 20 * sc * (1 - a), text = jl.text, col = with_alpha(AAA[aaa_kind(jl.text)] or C.white, a), size = 40 }
+    end
+    if live and live.c and live.c > 2 and not live.failed then
+        local _, y = proj(AAA_PLANE / 2, 0.36)
+        labels[#labels + 1] = { x = cx, y = y, text = tostring(live.c - 1) .. " combo", col = rgba(120, 200, 255, 200), size = 24 }
+    end
+    if S.song and S.song.count then
+        local pulse = 1 - (S.song.beat_phase or 0)
+        local _, y = proj(AAA_PLANE / 2, 0.5)
+        labels[#labels + 1] = { x = cx, y = y, text = S.song.count, col = with_alpha(C.yellow, 0.5 + 0.5 * pulse), size = 40 }
+    elseif not live and not S.song then
+        local _, y = proj(AAA_PLANE / 2, 0.5)
+        labels[#labels + 1] = { x = cx, y = y, text = "start when ready", col = C.dim, size = 18 }
+    end
+
+    -- HUD: tallies and streak on one side, the dummy as the "enemy" on the other
+    local hl, hr = 28 * sc, W - 28 * sc
+    local hy = top - 40 * sc
+    local left_free = pos ~= "left"
+    local right_free = pos ~= "right"
+    local hx = left_free and hl or (W - 28 * sc - 300 * sc)
+    local ex = right_free and hr or (hl + 300 * sc)
+    local ey = (left_free == right_free) and hy or (hy + 200 * sc)
+    if not left_free then hx, ex = W - 28 * sc - 300 * sc, W - 28 * sc end
+    labels[#labels + 1] = { x = hx + 150 * sc, y = hy, text = "APPLE ADDICT ATTACK", col = AAA.title, size = 32 }
+    local bw, gw = 92 * sc, 8 * sc
+    for i, kname in ipairs({ "SWEET", "GOOD", "DROP" }) do
+        local bx = hx + (i - 1) * (bw + gw)
+        draw.filled_rect(bx, hy + 26 * sc, bw, 58 * sc, AAA.panel)
+        draw.outline_rect(bx, hy + 26 * sc, bw, 58 * sc, rgba(42, 53, 80))
+        labels[#labels + 1] = { x = bx + bw / 2, y = hy + 46 * sc, text = tostring(aaa_tally[kname]), col = (kname == "DROP" and aaa_tally.DROP == 0) and C.white or AAA[kname], size = 32 }
+        labels[#labels + 1] = { x = bx + bw / 2, y = hy + 72 * sc, text = kname, col = rgba(167, 179, 201), size = 18 }
+    end
+    local st = S.stats or {}
+    local streak = st.streak or 0
+    for i = 1, 5 do
+        local dx, dy = hx + 9 * sc + (i - 1) * 20 * sc, hy + 104 * sc
+        if i <= streak then draw.filled_circle(dx, dy, 7 * sc, AAA.title, 16)
+        else draw.outline_circle(dx, dy, 7 * sc, rgba(71, 85, 105), 16) end
+    end
+    labels[#labels + 1] = { x = hx + 112 * sc + 90 * sc, y = hy + 104 * sc, text = streak == 1 and "1 clean run" or (tostring(streak) .. " clean runs in a row"), col = rgba(203, 213, 225), size = 18 }
+    -- the enemy: hits and damage of the combo in progress (or the last one)
+    do
+        local hits, dmg = S.combo_hits or 0, S.combo_dmg or 0
+        local r = 40 * sc
+        local hcx, hcy = ex - r, ey + r + 10 * sc
+        aaa_hex(hcx, hcy, r, AAA.enemy)
+        aaa_hex(hcx, hcy, r - 5 * sc, rgba(26, 18, 6, 240))
+        labels[#labels + 1] = { x = hcx, y = hcy - 4 * sc, text = tostring(hits), col = rgba(253, 186, 116), size = 32 }
+        labels[#labels + 1] = { x = hcx, y = hcy + 20 * sc, text = "hits", col = rgba(253, 186, 116), size = 18 }
+        labels[#labels + 1] = { x = hcx - r - 80 * sc, y = hcy - 14 * sc, text = "DUMMY", col = rgba(241, 245, 249), size = 18 }
+        labels[#labels + 1] = { x = hcx - r - 80 * sc, y = hcy + 10 * sc, text = tostring(dmg) .. " damage", col = rgba(203, 213, 225), size = 18 }
+    end
+
+    return labels, yb + 20 * sc
+end
+
+-- --------------------------------------------------------------------------
 -- main draw (called from re.on_frame)
 -- S = { mode, combo, profile, tracker, last, stats, cfg, msg }
 -- --------------------------------------------------------------------------
@@ -992,7 +1474,8 @@ function Overlay.draw(S)
     local view = cfg.train_view or "bar"
     local notes_on = S.mode == "train" and (view == "notes" or view == "both") and N >= 2 and S.profile ~= nil
     local fix_on = S.mode == "train" and view == "fix" and N >= 2 and S.profile ~= nil
-    local bar_on = not ((notes_on and view == "notes") or fix_on)
+    local aaa_on = S.mode == "train" and view == "aaa" and N >= 2 and S.profile ~= nil
+    local bar_on = not ((notes_on and view == "notes") or fix_on or aaa_on)
     local note_labels, notes_bottom = nil, nil
     -- note view layout: [bar] / notation line / ring / result
     local notes_ny = nil
@@ -1003,6 +1486,9 @@ function Overlay.draw(S)
         -- notation line, then the result line, then the lanes
         notes_ny = by
         note_labels = Overlay.fixation(S, W, H, sc, by + 110 * sc)
+    elseif aaa_on then
+        notes_ny = by
+        note_labels = Overlay.apple(S, W, H, sc, by + 110 * sc)
     end
     if N >= 2 and bar_on then
         local gap = 6 * sc
@@ -1167,7 +1653,7 @@ function Overlay.draw(S)
             text_at(bx + bw - tw, by - 26 * sc, nm, C.dim, f_sm)
         end
 
-        if S.song and S.song.count and not notes_on and not fix_on then
+        if S.song and S.song.count and not notes_on and not fix_on and not aaa_on then
             local tw = measure(S.song.count, f_big)
             text_at(W / 2 - tw / 2, by - 64 * sc, S.song.count, C.yellow, f_big)
         end

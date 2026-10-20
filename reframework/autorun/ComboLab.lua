@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.20.0"
+local VERSION = "1.21.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -34,7 +34,7 @@ local DEFAULTS = {
     spam_block = false,
     learn_in_train = false,
     show_detail = true,
-    train_view = "bar",       -- Train view: "bar" | "notes" (Spearmint Twintails) | "both" | "fix" (Strike Fixation)
+    train_view = "bar",       -- Train view: "bar" | "notes" (Spearmint Twintails) | "both" | "fix" (Strike Fixation) | "aaa" (Apple Addict Attack)
     fix_pos = "center",       -- Strike Fixation lanes: "left" | "center" | "right"
     note_approach = 36,        -- note flight time in frames
     note_flip = false,
@@ -445,7 +445,7 @@ local function apply_options(o)
     end
     Profile.PREDICT = cfg.predict ~= false
     if S.profile then S.profile._win = {} end
-    if o.train_view == "bar" or o.train_view == "notes" or o.train_view == "both" or o.train_view == "fix" then cfg.train_view = o.train_view end
+    if o.train_view == "bar" or o.train_view == "notes" or o.train_view == "both" or o.train_view == "fix" or o.train_view == "aaa" then cfg.train_view = o.train_view end
     if o.fix_pos == "left" or o.fix_pos == "center" or o.fix_pos == "right" then cfg.fix_pos = o.fix_pos end
     if o.note_flip ~= nil then cfg.note_flip = o.note_flip == true end
     if o.song_mode ~= nil then cfg.song_mode = o.song_mode == true; S.song = nil end
@@ -631,9 +631,9 @@ local function do_hotkeys()
     end
     if pressed(k.overlay) then cfg.overlay = not cfg.overlay; save_cfg() end
     if k.view and pressed(k.view) then
-        local order = { bar = "notes", notes = "both", both = "fix", fix = "bar" }
+        local order = { bar = "notes", notes = "both", both = "fix", fix = "aaa", aaa = "bar" }
         cfg.train_view = order[cfg.train_view or "bar"] or "bar"; save_cfg()
-        flash("Train view: " .. ({ bar = "bar", notes = "Spearmint Twintails", both = "bar + notes", fix = "Strike Fixation" })[cfg.train_view])
+        flash("Train view: " .. ({ bar = "bar", notes = "Spearmint Twintails", both = "bar + notes", fix = "Strike Fixation", aaa = "Apple Addict Attack" })[cfg.train_view])
     end
     if k.bot and pressed(k.bot) then
         if S.bot.running then S.bot:stop("stopped with F10")
@@ -856,6 +856,12 @@ re.on_frame(function()
     end
 
     S.tick_clock = Game.tick_clock
+    do
+        local d = Game.diag
+        S.stick_dir = d and d.u and d.u.dir or nil
+        S.combo_hits = d and d.cc or 0
+        S.combo_dmg = d and d.dmg or 0
+    end
     S.result_age = now - clock_result
     S.msg_age = now - clock_msg
     if cfg.enabled and cfg.overlay and in_training and not Game.paused() then
@@ -890,8 +896,8 @@ re.on_draw_ui(function()
     if imgui.button("Reset train stats") then handle_command({ cmd = "reset_stats" }) end
 
     changed, v = imgui.checkbox("Spam blocker (Train, F8)", cfg.spam_block); if changed then cfg.spam_block = v; save_cfg() end
-    local VIEWS = { "Bar", "Spearmint Twintails (notes)", "Bar + notes", "Strike Fixation (lanes)" }
-    local VKEY = { "bar", "notes", "both", "fix" }
+    local VIEWS = { "Bar", "Spearmint Twintails (notes)", "Bar + notes", "Strike Fixation (lanes)", "Apple Addict Attack (Ongeki-style)" }
+    local VKEY = { "bar", "notes", "both", "fix", "aaa" }
     local vi = 1
     for i, kk in ipairs(VKEY) do if cfg.train_view == kk then vi = i end end
     changed, v = imgui.combo("Train view (F11)", vi, VIEWS)
@@ -899,7 +905,7 @@ re.on_draw_ui(function()
     local PKEY = { "left", "center", "right" }
     local pi = 2
     for i, kk in ipairs(PKEY) do if cfg.fix_pos == kk then pi = i end end
-    changed, v = imgui.combo("Strike Fixation lanes", pi, { "Left", "Centre", "Right" })
+    changed, v = imgui.combo("Lane position (Strike Fixation / Apple)", pi, { "Left", "Centre", "Right" })
     if changed then cfg.fix_pos = PKEY[v]; save_cfg() end
     changed, v = imgui.slider_int and imgui.slider_int("Note flight (frames)", cfg.note_approach or 36, 18, 72)
     if changed then cfg.note_approach = v; save_cfg() end
