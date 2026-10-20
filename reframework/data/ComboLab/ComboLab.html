@@ -537,7 +537,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.21.3";
+const PAGE_VERSION = "1.21.4";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -2040,11 +2040,18 @@ async function renderUpdates(opts = {}) {
   };
   $("updApply").onclick = async () => {
     if (updBusy) return;
-    if (!confirm("Update ComboLab's program files on this PC now?")) return;
+    // two clicks rather than confirm(): a browser that blocks dialogs makes confirm() say no silently
+    const btn = $("updApply");
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = "1"; btn.textContent = "Click again to update";
+      setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = "Update now"; } }, 5000);
+      return;
+    }
+    delete btn.dataset.armed; btn.textContent = "Updating…";
     updBusy = true; msg("Updating…");
     let r;
     try { r = await FS.update({action: "apply"}); }
-    catch (e) { updBusy = false; msg(esc(e.message), true); return; }
+    catch (e) { updBusy = false; btn.textContent = "Update now"; msg(esc(e.message), true); return; }
     updLast = null;
     const lines = [`<b style="color:var(--good)">Updated to ${esc(r.remote_version || "the latest")}</b>: ${r.written.length} file${r.written.length === 1 ? "" : "s"}.`];
     if (r.mod_changed) lines.push(`<b>In game:</b> open the REFramework menu (Insert) → ScriptRunner → <b>Reset scripts</b> to load the new mod (or restart the game).`);

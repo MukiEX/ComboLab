@@ -195,12 +195,22 @@ def update_action(handler, body):
             res, _, _ = U.check(ROOT)
             return 200, res
         if act == "apply":
+            print("ComboLab update: updating from %s ..." % U.load_settings(ROOT).get("source", "hub"), flush=True)
             res = U.apply(ROOT)
+            if res.get("written"):
+                print("ComboLab update: %s -> %s, %d file(s)" % (res.get("local_version"), res.get("remote_version"), len(res["written"])), flush=True)
+            else:
+                print("ComboLab update: already up to date", flush=True)
             if res.get("restart"):
+                print("ComboLab update: restarting the server", flush=True)
                 restart_soon()
             return 200, res
     except U.UpdateError as e:
+        print("ComboLab update: %s" % e, flush=True)
         return 409, {"error": str(e)}
+    except Exception as e:          # e.g. a file Windows won't let go of
+        print("ComboLab update failed: %r" % e, flush=True)
+        return 500, {"error": "update failed: %s" % e}
     return 400, {"error": "unknown action"}
 
 
