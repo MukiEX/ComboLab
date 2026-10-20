@@ -32,7 +32,7 @@ Run `reframework/data/ComboLab/run_server.bat` (or `python combolab_server.py`, 
 
 The **Hub Sync** tab has an **Updates** card: **Check for updates**, then **Update now**. It replaces only program files: the mod's Lua, this page and the server scripts. Combos, profiles, sessions, config and hub settings are never touched, and the old files are kept in `reframework/data/ComboLab/.update/backup/`.
 
-- **From the hub** (default): the hub hands out the files it was built from, so after you rebuild the hub from the repo every PC can update from it. Nothing else to install.
+- **From the hub** (default): with the repo's `hub/docker-compose.yml` the hub hands out the program files straight from its checkout, so a `git pull` on the hub machine is enough for every PC to update from it (rebuild only when the hub itself changes). Nothing else to install.
 - **From a git repo:** pick "A git repo" and enter its address (and a branch if it isn't the default). Needs git on the PC; a private repo needs its login set up in git (Git Credential Manager or an SSH key).
 - If the server scripts changed, the server restarts by itself in a new window and the page reloads. If the mod changed, reset scripts in game: REFramework menu (Insert) → ScriptRunner → **Reset scripts**.
 - A `.bat` file can't be replaced while it's running, so a changed one is saved next to it as `.new`; swap it in with the server closed.

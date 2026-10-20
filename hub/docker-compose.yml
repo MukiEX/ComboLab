@@ -10,3 +10,6 @@ services:
       - "127.0.0.1:8770:8770"     # only your reverse proxy should reach it
     volumes:
       - ./data:/data:z             # :z for SELinux hosts
+      # program files PCs update from: straight from this checkout, so a
+      # `git pull` is enough for them (no rebuild); the image keeps a copy as a fallback
+      - ../reframework:/app/client/reframework:ro,z
