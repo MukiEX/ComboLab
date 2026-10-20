@@ -537,7 +537,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.21.0";
+const PAGE_VERSION = "1.21.1";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1917,7 +1917,7 @@ const agoS = t => { if (!t) return "never"; const s = Math.max(0, Date.now() / 1
 async function renderHubPage(quiet) {
   const card = $("hubCard"), con = $("hubConnect");
   if (!FS.server) {
-    card.innerHTML = `<h2>Hub</h2><p>Hub sync runs inside the ComboLab server. Start <span class="m">run_server.bat</span> in <span class="m">reframework\\data\\ComboLab</span> and open <span class="m">http://localhost:8765</span>, then come back to this tab.</p>`;
+    card.innerHTML = `<h2>Hub</h2><p>Hub sync runs inside the ComboLab server. Start <span class="m">run_server.bat</span> in <span class="m">reframework\\data\\ComboLab</span> and open <span class="m">http://localhost:41236</span>, then come back to this tab.</p>`;
     con.hidden = true; return;
   }
   let h;
@@ -1999,7 +1999,7 @@ async function renderUpdates(opts = {}) {
   const files = lc && !lc.up_to_date ? [...(lc.changed || []).map(f => ["changed", f]), ...(lc.added || []).map(f => ["new", f])] : [];
   card.innerHTML = `<h2>Updates</h2>
     <div class="hubstate"><span class="big">This PC: ${esc(u.local_version || "?")}</span>${lc ? `<span>${updSummary(lc)}</span>` : ""}</div>
-    ${u.allowed ? "" : `<div class="notice" style="margin-top:10px">Updates can only be started on the gaming PC itself (open <b>http://localhost:8765</b> there), or when the server runs with <span style="font-family:var(--mono)">--token</span>.</div>`}
+    ${u.allowed ? "" : `<div class="notice" style="margin-top:10px">Updates can only be started on the gaming PC itself (open <b>http://localhost:${location.port || 41236}</b> there), or when the server runs with <span style="font-family:var(--mono)">--token</span>.</div>`}
     <div class="row" style="margin-top:12px;align-items:flex-end;gap:14px">
       <label class="f">Get updates from <select id="updSource" ${u.allowed ? "" : "disabled"}><option value="hub">The hub${u.hub ? " (" + esc(String(u.hub).replace(/^https?:\/\//, "")) + ")" : " (not connected)"}</option><option value="git">A git repo</option></select></label>
       <label class="f grow" id="updGitBox">Repo address <input type="text" id="updGitUrl" placeholder="https://github.com/you/ComboLab.git" value="${esc(s.git_url || "")}" ${u.allowed ? "" : "disabled"}></label>

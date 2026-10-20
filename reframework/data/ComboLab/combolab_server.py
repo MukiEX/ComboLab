@@ -2,7 +2,7 @@
 """ComboLab server: serves ComboLab.html and its data folder over the LAN so the
 setup page can run on another screen, phone or tablet.
 
-    python combolab_server.py              # http://<this-pc>:8765
+    python combolab_server.py              # http://<this-pc>:41236
     python combolab_server.py --port 9000 --token secret
 
 Standard library only (Python 3.8+). The game side keeps reading and writing the
@@ -149,6 +149,9 @@ def update_info():
             "git": bool(__import__("shutil").which("git"))}
 
 
+DEFAULT_PORT = 41236
+
+
 def restart_soon():
     """Starts a fresh server process (new code) and ends this one."""
     import subprocess
@@ -161,6 +164,10 @@ def restart_soon():
         if SERVER:
             SERVER.server_close()
         args = [sys.executable, os.path.abspath(__file__)] + sys.argv[1:]
+        # keep the port this server is on, so the page that asked for the update
+        # reconnects (e.g. 8765 from before the default changed)
+        if SERVER and not any(x == "--port" or x.startswith("--port=") for x in sys.argv[1:]):
+            args += ["--port", str(SERVER.server_address[1])]
         kw = {"cwd": ROOT}
         if os.name == "nt":
             kw["creationflags"] = getattr(subprocess, "CREATE_NEW_CONSOLE", 0x10)
@@ -361,7 +368,7 @@ def main():
     global ROOT, TOKEN, NO_SYNC
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="0.0.0.0", help="interface to listen on (default: all; use 127.0.0.1 for this PC only)")
-    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--port", type=int, default=DEFAULT_PORT, help="default %d (41236: the half-circle forward motion)" % DEFAULT_PORT)
     ap.add_argument("--token", default=None, help="optional shared secret; the page asks for it once")
     ap.add_argument("--root", default=ROOT, help="ComboLab data folder (default: this script's folder)")
     ap.add_argument("--no-sync", action="store_true", help="don't run the hub sync agent even if sync.json exists")

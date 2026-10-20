@@ -22,7 +22,7 @@ On Linux/Proton, set the usual `WINEDLLOVERRIDES="dinput8=n,b"` for REFramework.
 
 ## Manage it from another screen or device
 
-Run `reframework/data/ComboLab/run_server.bat` (or `python combolab_server.py`, Python 3.8+, no extra packages). It prints the address to open on your phone, tablet or second PC, e.g. `http://192.168.1.20:8765`. The page works the same as the local one; no folder picking needed.
+Run `reframework/data/ComboLab/run_server.bat` (or `python combolab_server.py`, Python 3.8+, no extra packages). It prints the address to open on your phone, tablet or second PC, e.g. `http://192.168.1.20:41236`. The page works the same as the local one; no folder picking needed.
 
 - `--token yoursecret` makes the page ask for a shared secret once (stored in that browser).
 - `--host 127.0.0.1` keeps it to this PC only. `--port` changes the port.
@@ -36,7 +36,7 @@ The **Hub Sync** tab has an **Updates** card: **Check for updates**, then **Upda
 - **From a git repo:** pick "A git repo" and enter its address (and a branch if it isn't the default). Needs git on the PC; a private repo needs its login set up in git (Git Credential Manager or an SSH key).
 - If the server scripts changed, the server restarts by itself in a new window and the page reloads. If the mod changed, reset scripts in game: REFramework menu (Insert) → ScriptRunner → **Reset scripts**.
 - A `.bat` file can't be replaced while it's running, so a changed one is saved next to it as `.new`; swap it in with the server closed.
-- Updates can only be started from the gaming PC itself (`http://localhost:8765`), or from any device when the server runs with `--token`, since they install code.
+- Updates can only be started from the gaming PC itself (`http://localhost:41236`), or from any device when the server runs with `--token`, since they install code.
 - Without the page: `run_update.bat` (or `python combolab_update.py check | apply | source hub | source git <url> [branch]`).
 
 The first time, copy 1.14's files over by hand (or with a bundle); from then on the updater handles it.
@@ -91,7 +91,7 @@ docker compose -f hub/docker-compose.yml run --rm hub set-admin-password      # 
 
 Server-side backups: `combolab_hub.py export <folder>` writes everything out as plain JSON files. `allow-key`, `list-keys` and `remove-key` manage keys from the shell.
 
-**On each gaming PC**, start **run_server.bat**, open the page from it (`http://localhost:8765`) and go to the **Hub Sync** tab:
+**On each gaming PC**, start **run_server.bat**, open the page from it (`http://localhost:41236`) and go to the **Hub Sync** tab:
 1. Enter the hub's address and a name for this PC. It suggests the PC's hostname; letters, digits, `-`, `_` and `.` only.
 2. Click **Ask to join**. The PC makes its own sync token and sends the hub only a hash of it.
 3. Approve the request on the hub's `/admin` page under **Sync machines → Asking to join**. Syncing starts by itself, every 20 seconds while the server runs.
