@@ -308,6 +308,7 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
         <details class="more"><summary>Overlay and notes</summary>
           <div class="row" style="margin-top:10px;gap:22px;align-items:flex-end">
             <label class="f">Overlay scale <input type="range" id="optScale" min="0.5" max="2" step="0.05" value="1"></label>
+            <label class="f">Text size <input type="range" id="optTextScale" min="0.75" max="2.5" step="0.05" value="1.4"></label>
             <label class="f">Overlay height <input type="range" id="optY" min="0.02" max="0.9" step="0.005" value="0.25"></label>
             <label class="f">Lane position <select id="optFixPos"><option value="left">Left</option><option value="center" selected>Centre</option><option value="right">Right</option></select></label>
             <label class="f">Note flight <input type="range" id="optApproach" min="18" max="72" step="2" value="36"></label>
@@ -538,7 +539,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.22.0";
+const PAGE_VERSION = "1.22.1";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1219,7 +1220,7 @@ function optionsFromForm() {
   return {
     spam_block: $("optSpam").checked, learn_in_train: $("optLearn").checked, show_detail: $("optDetail").checked,
     ignore_spam_samples: $("optIgnoreSpam").checked, user_side: $("optP2").checked ? 1 : 0,
-    scale: +$("optScale").value, y: +$("optY").value,
+    scale: +$("optScale").value, text_scale: +$("optTextScale").value, y: +$("optY").value,
     rhythm: $("optRhythm").checked, rhythm_demo: $("optDemo").checked, predict: $("optPredict").checked, auto_place: $("optPlace").checked,
     train_view: $("optView").value, note_approach: +$("optApproach").value, note_flip: $("optFlip").checked, note_palette: $("optPalette").value, fix_pos: $("optFixPos").value,
     motion_arrows: $("optArrows").checked,
@@ -1246,6 +1247,7 @@ function optionsToForm(o) {
   if (o.song_approach) $("optSongApproach").value = o.song_approach;
   if (o.song_beat) $("optSongBeat").value = o.song_beat;
   if (o.scale) $("optScale").value = o.scale;
+  if (o.text_scale) $("optTextScale").value = o.text_scale;
   if (o.y) $("optY").value = o.y;
 }
 

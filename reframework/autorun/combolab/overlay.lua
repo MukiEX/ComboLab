@@ -24,14 +24,18 @@ Overlay.C = C
 
 -- Fonts are loaded once when the script loads (REFramework can't add fonts to
 -- ImGui's atlas mid-frame), then the nearest preloaded size is used.
-local FONT_SIZES = { 18, 24, 32, 40 }
+-- (up to 4K with a big text size: the nearest preloaded size is used, so the
+-- range has to cover what a 2160p screen at "Text size" 2 asks for)
+local FONT_SIZES = { 18, 22, 26, 32, 40, 48, 56, 66, 78, 92, 108 }
 local fonts = {}
 Overlay.fonts_ok = false
 for _, px in ipairs(FONT_SIZES) do
     local ok, f = pcall(imgui.load_font, nil, px)
     if ok and f ~= nil then fonts[px] = f; Overlay.fonts_ok = true end
 end
+Overlay.text_scale = 1.0
 local function font(px)
+    px = px * (Overlay.text_scale or 1)
     local best, bd = nil, math.huge
     for size, f in pairs(fonts) do
         local d = math.abs(size - px)
@@ -1455,6 +1459,7 @@ end
 function Overlay.draw(S)
     Overlay.frame_id = Overlay.frame_id + 1
     local cfg = S.cfg
+    Overlay.text_scale = math.max(0.75, math.min(2.5, tonumber(cfg.text_scale) or 1.4))
     local disp = imgui.get_display_size()
     local W, H = disp.x, disp.y
     local sc = (H / 1080) * (cfg.scale or 1.0)
@@ -1553,6 +1558,17 @@ function Overlay.draw(S)
         p.items, p.w = rich(p[1], f_mid, arrows and not p.sep)
         total = total + p.w
     end
+    -- a long combo in big text: shrink the notation line to fit the screen
+    if total > W * 0.94 then
+        local f2 = font(32 * sc * (W * 0.94 / total))
+        if f2 ~= f_mid then
+            f_mid, total = f2, 0
+            for _, p in ipairs(pieces) do
+                p.items, p.w = rich(p[1], f_mid, arrows and not p.sep)
+                total = total + p.w
+            end
+        end
+    end
     local _, line_h = measure("Ag", f_mid)
     local ny = notes_ny or (by + bh + 34 * sc)
     local ry = notes_bottom or (ny + line_h + 18 * sc)
@@ -1634,7 +1650,7 @@ function Overlay.draw(S)
     imgui.push_style_var(4, 0.0) -- window border
     if imgui.begin_window("##combolab_overlay", true, flags) then
         if not Overlay.fonts_ok and imgui.set_window_font_scale then
-            pcall(imgui.set_window_font_scale, 1.6 * sc)
+            pcall(imgui.set_window_font_scale, 1.6 * sc * (Overlay.text_scale or 1))
         end
 
         -- mode tag
@@ -1647,11 +1663,14 @@ function Overlay.draw(S)
                 b.attempts or 0)
         end
         if S.mode == "train" and cfg.spam_block then tag = tag .. " | SPAM BLOCK" end
-        text_at(bx, by - 26 * sc, tag, S.bot_status and C.magenta or (S.mode == "train" and C.orange or C.cyan), f_sm)
+        -- above the notation panel, clear of it however big the text is
+        local _, sm_h = measure("Ag", f_sm)
+        local tag_y = math.min(by - 26 * sc, (notes_ny or by) - pad * 0.6 - sm_h - 4 * sc)
+        text_at(bx, tag_y, tag, S.bot_status and C.magenta or (S.mode == "train" and C.orange or C.cyan), f_sm)
         if combo then
             local nm = combo.name or combo.id or ""
             local tw = measure(nm, f_sm)
-            text_at(bx + bw - tw, by - 26 * sc, nm, C.dim, f_sm)
+            text_at(bx + bw - tw, tag_y, nm, C.dim, f_sm)
         end
 
         if S.song and S.song.count and not notes_on and not fix_on and not aaa_on then

@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.22.0"
+local VERSION = "1.22.1"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -50,6 +50,7 @@ local DEFAULTS = {
     rhythm_demo = true,        -- ...and a looping cadence preview between attempts
     ignore_spam_samples = true,
     scale = 1.0,
+    text_scale = 1.4,         -- text size on top of the overlay scale
     y = 0.25,
     result_seconds = 4,
     user_side = 0,
@@ -533,7 +534,7 @@ local function apply_options(o)
     if o.note_palette == "classic" or o.note_palette == "sf6" then cfg.note_palette = o.note_palette end
     if tonumber(o.note_approach) then cfg.note_approach = math.max(12, math.min(90, math.floor(tonumber(o.note_approach)))) end
     if tonumber(o.place_spacing) then cfg.place_spacing = math.max(0, math.min(200, tonumber(o.place_spacing))) end
-    for _, k in ipairs({ "scale", "y", "result_seconds", "timeout" }) do
+    for _, k in ipairs({ "scale", "text_scale", "y", "result_seconds", "timeout" }) do
         if tonumber(o[k]) then cfg[k] = tonumber(o[k]) end
     end
     if cfg.y == 0.115 or cfg.y == 0.15 then cfg.y = 0.25 end -- old page defaults
@@ -664,7 +665,7 @@ local function write_status()
         last = S.last and compact(S.last) or nil,
         options = {
             spam_block = cfg.spam_block, learn_in_train = cfg.learn_in_train, show_detail = cfg.show_detail,
-            ignore_spam_samples = cfg.ignore_spam_samples, scale = cfg.scale, y = cfg.y,
+            ignore_spam_samples = cfg.ignore_spam_samples, scale = cfg.scale, text_scale = cfg.text_scale, y = cfg.y,
             user_side = cfg.user_side, overlay = cfg.overlay, enabled = cfg.enabled,
             rhythm = cfg.rhythm, rhythm_demo = cfg.rhythm_demo,
             train_view = cfg.train_view, note_approach = cfg.note_approach, note_flip = cfg.note_flip, note_palette = cfg.note_palette, fix_pos = cfg.fix_pos,
@@ -1052,6 +1053,7 @@ re.on_draw_ui(function()
     changed, v = imgui.checkbox("I'm on the 2P side", cfg.user_side == 1)
     if changed then cfg.user_side = v and 1 or 0; Game.user = cfg.user_side; S.tracker:reset_learning(); save_cfg() end
     changed, v = imgui.slider_float("Overlay scale", cfg.scale, 0.5, 2.0); if changed then cfg.scale = v; save_cfg() end
+    changed, v = imgui.slider_float("Text size", cfg.text_scale or 1.4, 0.75, 2.5); if changed then cfg.text_scale = v; save_cfg() end
     changed, v = imgui.slider_float("Overlay height", cfg.y, 0.02, 0.9); if changed then cfg.y = v; save_cfg() end
 
     if imgui.tree_node("Research bot") then
