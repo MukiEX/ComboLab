@@ -540,7 +540,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.22.2";
+const PAGE_VERSION = "1.22.3";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1252,6 +1252,15 @@ function optionsToForm(o) {
   if (o.y) $("optY").value = o.y;
 }
 
+// Only what you changed goes to the game: sending the whole form would put
+// back things changed in game since (F7's detail table, F11's view, ...)
+function changedOptions() {
+  const cur = optionsFromForm(), base = st.optsBase || {}, out = {};
+  for (const k in cur) if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) out[k] = cur[k];
+  st.optsBase = cur;
+  return out;
+}
+
 function botBusy() { const b = st.status && st.status.bot; return !!(b && b.running); }
 
 // Loads the selected combo in game, in the mode of the open sub-tab.
@@ -1265,7 +1274,7 @@ async function loadInGame(why) {
     if (st.status.mode !== mode) await sendCommand({cmd: "mode", mode});
   } else {
     const cmd = {cmd: "load", combo_id: c.id, mode};
-    if (st.optsSynced) cmd.options = optionsFromForm();
+    if (st.optsSynced) { const ch = changedOptions(); if (Object.keys(ch).length) cmd.options = ch; }
     await sendCommand(cmd);
   }
   note(why || `Sent to game: ${st.sub === "training" ? "Training" : "Profiling"}. Jump into Training mode.`);
@@ -1647,7 +1656,10 @@ async function pollData(force) {
   if (s && (force || s.mtime !== st.statusMtime)) {
     const first = !st.status;
     st.statusMtime = s.mtime; st.status = s.data;
-    if (first) { optionsToForm(s.data.options); st.optsSynced = true; }
+    // the form follows the game's options (they change in game too: F7, F11, the REFramework menu),
+    // except while a change of yours is on its way
+    const so = JSON.stringify(s.data.options || null);
+    if (!optTimer && so !== st.optsSeen) { st.optsSeen = so; optionsToForm(s.data.options); st.optsBase = optionsFromForm(); st.optsSynced = true; }
     // follow the character picked in Training: the sidebar (and so "all combos"
     // for the bot) switches to them whenever it changes in game
     const gf = +s.data.fighter_id || 0;
@@ -1914,11 +1926,11 @@ $("btnResetStats").onclick = () => sendCommand({cmd: "reset_stats", keep_history
 $("btnResetProfile").onclick = async () => { if (!st.sel) return; if (!confirm("Clear all timing samples for this combo?")) return; await sendCommand({cmd: "reset_profile", combo_id: st.sel}); setTimeout(() => pollData(true), 1500); };
 
 // options go to the game as they change
-let optTimer = null;
+var optTimer = null;   // (var: pollData reads it before this line runs)
 document.querySelectorAll('[id^="opt"]').forEach(el => el.addEventListener(el.type === "range" ? "change" : "input", () => {
   if (el.id === "optArrows") { LS.set("arrows", el.checked ? "1" : "0"); rerenderLabels(); }
   clearTimeout(optTimer);
-  optTimer = setTimeout(() => { if (FS.ok) { sendCommand({cmd: "options", options: optionsFromForm()}); $("optMsg").textContent = "Sent to the game."; setTimeout(() => $("optMsg").textContent = "Changes go to the game as you make them.", 2500); } }, 350);
+  optTimer = setTimeout(() => { optTimer = null; if (FS.ok) { const ch = changedOptions(); if (!Object.keys(ch).length) return; sendCommand({cmd: "options", options: ch}); $("optMsg").textContent = "Sent to the game."; setTimeout(() => $("optMsg").textContent = "Changes go to the game as you make them.", 2500); } }, 350);
 }));
 
 // ---------------------------------------------------------------- Hub Sync page
