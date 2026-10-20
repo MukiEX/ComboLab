@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.19.2"
+local VERSION = "1.20.0"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -20,6 +20,7 @@ local MoveData = require("combolab.movedata")
 local Predict = require("combolab.predict")
 local Speed = require("combolab.speed")
 local Dummy = require("combolab.dummy")
+local TS = require("combolab.tsettings")
 
 local DIR = "ComboLab\\"
 local CFG_PATH = DIR .. "config.json"
@@ -210,6 +211,8 @@ local function load_combo(id)
             if cfg.auto_dummy and in_training then
                 local ok, msg = pcall(Dummy.setup, c, { no_guard = S.bot and S.bot.running })
                 if ok then L("%s", msg) end
+                local ok2, n = pcall(TS.apply_combo, c.training_settings)
+                if ok2 and n and n > 0 then L("training settings for this combo: %d set", n) end
             end
             place.done, place.idle = false, 0
             cfg.combo_id = c.id
@@ -435,8 +438,11 @@ local function apply_options(o)
     for _, k in ipairs({ "spam_block", "learn_in_train", "show_detail", "ignore_spam_samples", "overlay", "enabled", "rhythm", "rhythm_demo", "motion_arrows", "predict", "auto_place", "auto_dummy", "song_place" }) do
         if o[k] ~= nil then cfg[k] = o[k] == true end
     end
-    if was_auto_dummy and not cfg.auto_dummy then pcall(Dummy.restore) end
-    if cfg.auto_dummy and not was_auto_dummy and S.combo and in_training then pcall(Dummy.setup, S.combo, {}) end
+    if was_auto_dummy and not cfg.auto_dummy then pcall(Dummy.restore); pcall(TS.restore) end
+    if cfg.auto_dummy and not was_auto_dummy and S.combo and in_training then
+        pcall(Dummy.setup, S.combo, {})
+        pcall(TS.apply_combo, S.combo.training_settings)
+    end
     Profile.PREDICT = cfg.predict ~= false
     if S.profile then S.profile._win = {} end
     if o.train_view == "bar" or o.train_view == "notes" or o.train_view == "both" or o.train_view == "fix" then cfg.train_view = o.train_view end
@@ -515,6 +521,24 @@ local function handle_command(c)
             local ok, why = Speed.start_probe(DIR .. "speed_probe.json")
             flash(ok and "Speed probe: hands off for ~3 s (the game may stutter)" or ("Speed probe: " .. tostring(why)))
         end
+    elseif cmd == "tset_snapshot" then
+        -- "Remember Training settings": the player then changes something in the menu
+        if not in_training then flash("Go into Training mode first")
+        else
+            local snap = TS.snapshot()
+            local n = 0
+            for _ in pairs(snap) do n = n + 1 end
+            S.tset = { snap = snap, snap_time = os.time(), snap_count = n }
+            flash(string.format("Remembered %d Training settings: change one in the menu, then press What changed?", n))
+        end
+    elseif cmd == "tset_diff" then
+        if not (S.tset and S.tset.snap) then flash("Press Remember settings first")
+        else
+            local ch = TS.diff(S.tset.snap, TS.snapshot())
+            S.tset.changes, S.tset.diff_time = {}, os.time()
+            for i = 1, math.min(#ch, 40) do S.tset.changes[i] = ch[i] end
+            flash(string.format("%d Training setting(s) changed", #ch))
+        end
     elseif cmd == "speed_settings" then
         if tonumber(c.research_speed) then cfg.research_speed = math.max(1, math.min(8, tonumber(c.research_speed))) end
         if c.speed_key ~= nil then cfg.speed_key = (c.speed_key ~= "" and c.speed_key ~= false) and tostring(c.speed_key) or nil end
@@ -565,6 +589,7 @@ local function write_status()
             song_mode = cfg.song_mode, song_follow = cfg.song_follow, song_approach = cfg.song_approach, song_beat = cfg.song_beat,
         },
         bot = S.bot:status(),
+        tset = S.tset and { snap_time = S.tset.snap_time, snap_count = S.tset.snap_count, diff_time = S.tset.diff_time, changes = S.tset.changes } or nil,
         dummy = in_training and (function()
             local ok, d = pcall(Dummy.status)
             if not ok then return nil end
@@ -740,6 +765,7 @@ re.on_frame(function()
         in_training = Game.in_training()
         if in_training and not was_training and S.combo and cfg.auto_dummy then
             pcall(Dummy.setup, S.combo, { no_guard = S.bot.running })
+            pcall(TS.apply_combo, S.combo.training_settings)
         end
         if in_training then
             Game.user = cfg.user_side or 0

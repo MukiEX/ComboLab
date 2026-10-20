@@ -240,8 +240,14 @@ kbd { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background
           <label class="switch"><input type="checkbox" id="optPlace" checked> Corner combos: place fighters in the corner</label>
           <label class="switch"><input type="checkbox" id="optDetail"> Detail table in game</label>
           <label class="switch"><input type="checkbox" id="optIgnoreSpam" checked> Ignore spammed samples</label>
-          <label class="switch"><input type="checkbox" id="optAutoDummy" checked> Set the dummy for each combo <span class="muted">(counter hit, stance; no guard while the bot runs)</span></label>
+          <label class="switch"><input type="checkbox" id="optAutoDummy" checked> Set the dummy and Training settings for each combo <span class="muted">(counter hit, stance, saved settings; no guard while the bot runs)</span></label>
         </div>
+        <details class="more" id="tsetBox"><summary>Training settings for this combo <span class="muted" id="tsetCount"></span></summary>
+          <div class="muted" style="font-size:12px;margin:8px 0">For settings ComboLab doesn't know by name, like a character-specific one (Juri's unlimited Feng Shui Engine). Press <b>Remember settings</b>, change the setting in SF6's Training menu, press <b>What changed?</b>, tick what belongs to this combo and save. It's set whenever this combo loads and put back when you load another.</div>
+          <div id="tsetSaved"></div>
+          <div class="row" style="margin-top:8px"><button class="btn small" id="btnTsetSnap">Remember settings</button><button class="btn small" id="btnTsetDiff">What changed?</button><span id="tsetMsg" class="ink2" style="font-size:12.5px"></span></div>
+          <div id="tsetChanges" style="margin-top:8px"></div>
+        </details>
       </section>
 
       <section class="card" id="botCard">
@@ -531,7 +537,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.19.2";
+const PAGE_VERSION = "1.20.0";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1170,6 +1176,7 @@ async function saveDraft() {
   if (d.dummy && (d.dummy.counter !== "auto" || d.dummy.stance !== "auto")) combo.dummy = d.dummy;
   if (prev && prev.verified && !combo.experimental) combo.verified = prev.verified;
   if (prev && prev.bot) combo.bot = prev.bot;
+  if (prev && prev.training_settings) combo.training_settings = prev.training_settings;
   if (!FS.ok) { $("saveMsg").textContent = "Not linked to a folder: use Export JSON."; return null; }
   await writeCombo(combo);
   if (prev && prev.hash !== hash) { delete prof[combo.id]; if (st.sel === combo.id) { st.profile = null; st.profileMtime = 0; } }
@@ -1534,6 +1541,7 @@ function renderTrain() {
 
 function renderPanes() {
   renderProgress();
+  try { renderTset(); } catch (e) {}
   if (st.sub === "profiling") renderProfile(); else { renderToday(); renderTrain(); }
 }
 
@@ -1644,6 +1652,7 @@ async function pollData(force) {
     for (const r of arr(s.data.bot && s.data.bot.results)) if (r.ok && st.combos[r.id] && st.combos[r.id].experimental) verifyCombo(r.id, "research bot");
     for (const r of arr(s.data.bot && s.data.bot.results)) saveJumpIn(r);
     renderHeaderStatus(); renderLibrary(); renderComboHead(); renderBot();
+    try { renderTset(); } catch (e) {}
     if (st.sub === "training") renderToday();
   } else if (st.status) renderHeaderStatus();
   const hub = await FS.read("shared/_status.json");
@@ -1780,6 +1789,46 @@ function renderBot() {
   }
   box.innerHTML = html;
 }
+
+
+/* ===================== Training settings saved with a combo ===================== */
+const fmtV = v => typeof v === "boolean" ? (v ? "on" : "off") : String(v);
+function renderTset() {
+  const c = st.sel && st.combos[st.sel];
+  const saved = arr(c && c.training_settings);
+  $("tsetCount").textContent = saved.length ? `(${saved.length})` : "";
+  $("tsetSaved").innerHTML = saved.length ? saved.map((x, i) => `<div class="row" style="font:12px var(--mono);gap:8px"><span class="grow">${esc(x.path)} = <b>${esc(fmtV(x.value))}</b></span><button class="btn small danger" data-rm="${i}">✕</button></div>`).join("") : `<div class="muted" style="font-size:12.5px">None saved for this combo.</div>`;
+  $("tsetSaved").querySelectorAll("[data-rm]").forEach(b => b.onclick = async () => {
+    const list = arr(c.training_settings).slice(); list.splice(+b.dataset.rm, 1);
+    await writeCombo({...c, training_settings: list}); sendCommand({cmd: "rescan"}); renderTset();
+  });
+  const t = st.status && st.status.tset;
+  $("tsetMsg").textContent = t ? (t.diff_time && t.diff_time >= t.snap_time ? `${arr(t.changes).length} changed` : `remembered ${t.snap_count} settings ${agoS(t.snap_time)}; now change one in the menu`) : "";
+  const ch = arr(t && t.diff_time >= t.snap_time && t.changes);
+  if (!ch.length || !c) { $("tsetChanges").innerHTML = ""; return; }
+  if ($("tsetChanges").dataset.t === String(t.diff_time)) return;      // keep the ticks while the list is the same
+  $("tsetChanges").dataset.t = String(t.diff_time);
+  $("tsetChanges").innerHTML = ch.map((x, i) => `<label class="switch" style="font:12px var(--mono);display:flex"><input type="checkbox" data-i="${i}" checked> ${esc(x.path)}: ${esc(fmtV(x.from))} → <b>${esc(fmtV(x.to))}</b></label>`).join("")
+    + `<div class="row" style="margin-top:8px"><button class="btn small primary" id="btnTsetSave">Save ticked to this combo</button>`
+    + (sectionOf(c) ? `<button class="btn small" id="btnTsetSaveSec">Save to all ${combosFor(c.fighter_id).filter(x => sectionOf(x) === sectionOf(c)).length} in “${esc(sectionOf(c))}”</button>` : "") + `</div>`;
+  const save = async targets => {
+    const picked = [...$("tsetChanges").querySelectorAll("input:checked")].map(x => ch[+x.dataset.i]);
+    if (!picked.length) return;
+    for (const t of targets) {
+      const cur = st.combos[t.id];
+      const list = arr(cur.training_settings).filter(x => !picked.some(p => p.path === x.path));
+      for (const p of picked) list.push({path: p.path, value: p.to});
+      await writeCombo({...cur, training_settings: list});
+    }
+    $("tsetChanges").innerHTML = ""; $("tsetChanges").dataset.t = "";
+    sendCommand({cmd: "rescan"});
+    renderTset();
+  };
+  $("btnTsetSave").onclick = () => save([c]);
+  if ($("btnTsetSaveSec")) $("btnTsetSaveSec").onclick = () => save(combosFor(c.fighter_id).filter(x => sectionOf(x) === sectionOf(c)));
+}
+$("btnTsetSnap").onclick = () => { sendCommand({cmd: "tset_snapshot"}); $("tsetMsg").textContent = "Remembering… (be in Training mode)"; };
+$("btnTsetDiff").onclick = () => { sendCommand({cmd: "tset_diff"}); $("tsetMsg").textContent = "Comparing…"; };
 
 /* ===================== wire up ===================== */
 let hubTimer = null, hubShowConnect = false;

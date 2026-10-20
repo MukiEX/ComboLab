@@ -155,7 +155,7 @@ With **Set the dummy for each combo** on (Profiling tab, on by default), loading
 - **Stance:** crouching with "crouch" in the name, otherwise standing.
 - **Guard:** off while the research bot runs, then back to what you had.
 
-Each combo can override both in Combo Database (Edit > Dummy counter / Dummy stance). The combo header shows what the dummy is set to. Turning the option off puts your own settings back. The field names come from Wael3rd's SF6_Tools (MIT).
+Each combo can override both in Combo Database (Edit > Dummy counter / Dummy stance). **Training settings for this combo** (Profiling tab) covers any other Training setting, such as character-specific ones like Juri's unlimited Feng Shui Engine: press **Remember settings**, change the setting in SF6's Training menu, press **What changed?**, tick what belongs and save it to the combo (or to every combo in its section). It's set whenever that combo loads and put back when another one loads. The combo header shows what the dummy is set to. Turning the option off puts your own settings back. The field names come from Wael3rd's SF6_Tools (MIT).
 
 ## Fighter placement for your own practice
 
