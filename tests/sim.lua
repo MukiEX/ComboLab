@@ -189,5 +189,32 @@ do
     check(p3:window(3).sweet_hi == w3.sweet_hi, "sweet spot survives save/load")
 end
 
+-- 8) a power-up step (no hitbox): as a "hit" step it can only fail; timed as a
+--    movement step the combo goes through
+do
+    local function pcombo(kind)
+        return { id = "pw" .. kind, version = 1, hash = "p" .. kind, steps = {
+            { label = "2LP", sep = "start", kind = "hit", trigger = { type = "button", mask = LP, mode = "all" } },
+            { label = "5HK", sep = ",", kind = kind, trigger = { type = "button", mask = HK, mode = "all" } },
+            { label = "2LP", sep = ",", kind = "hit", trigger = { type = "button", mask = LP, mode = "all" } },
+        } }
+    end
+    local plan = { { btn = LP, dir = 2, delay = 30 }, { btn = HK, dir = 5, delay = 13 }, { btn = LP, dir = 2, delay = 3 } }
+    for _, kind in ipairs({ "hit", "move" }) do
+        local c = pcombo(kind)
+        local p = Profile.new(c)
+        local tr = Tracker.new({})
+        tr:set_combo(c, p)
+        local r = run(tr, plan, 200)[1]
+        p:learn(r or { steps = {} }, "develop")
+        if kind == "hit" then
+            check(r and not r.ok,
+                "power-up as a hit step drops the combo: " .. tostring(r and r.fail_step) .. " " .. tostring(r and r.steps[2] and r.steps[2].res))
+        else
+            check(r and r.ok, "power-up as a movement step: combo goes through (" .. tostring(r and r.fail_step) .. " " .. tostring(r and r.steps[r.fail_step or 1] and r.steps[r.fail_step or 1].hint) .. ")")
+        end
+    end
+end
+
 print(string.format("\n%d passed, %d failed", pass, fail))
 os.exit(fail == 0 and 0 or 1)

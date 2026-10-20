@@ -8,6 +8,8 @@ local MOVES = {
     ["5LK"] = { id = 110, btn = LK, dir = 5, startup = 5, active = 2, rec = 10, stun = 16, cancel = { 5, 14 } },
     ["5HP"] = { id = 120, btn = HP, dir = 5, startup = 6, active = 3, rec = 20, stun = 24, cancel = { 8, 18 } },
     ["2MK"] = { id = 130, btn = MK, dir = 2, startup = 7, active = 2, rec = 12, stun = 14, cancel = nil },
+    -- a power-up with no hitbox (like Juri's Feng Shui Engine activation)
+    ["5HK"] = { id = 150, btn = HK, dir = 5, startup = 2, active = 0, rec = 1, stun = 0, cancel = nil, nohit = true },
 }
 local STAND, CROUCH, DR_START, DR_RUN = 1, 2, 50, 51
 -- jumping: 4 frames of prejump, 36 in the air covering JUMP_DIST, 3 of landing.
@@ -132,7 +134,7 @@ local function engine_step(e, held, dir)
     end
 
     -- hit check on first active frame
-    if e.mv and not e.inst_hit and e.af == e.mv.startup then
+    if e.mv and not e.mv.nohit and not e.inst_hit and e.af == e.mv.startup then
         if e.cc == 0 and e.opp_stun == 0 and e.started_combo then
             e.guard = 10  -- opponent recovered: blocks
             e.started_combo = false

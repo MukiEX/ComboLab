@@ -145,6 +145,7 @@ function MoveData.facts(pl, fighter, id)
             end
         end
         table.sort(facts.atk, function(x, y) return (x.s or 0) < (y.s or 0) end)
+        if #facts.atk > 0 then MoveData.seen_atk = true end
         -- hit data of the first strike
         local first = facts.atk[1]
         if first then
@@ -225,6 +226,7 @@ function MoveData.cancel_ranges(pl, fighter, A, b_id)
 end
 
 function MoveData.clear()
+    MoveData.seen_atk = nil
     cache, group_cache, trig_cache = {}, {}, {}
 end
 

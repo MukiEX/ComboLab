@@ -78,6 +78,7 @@ function Profile.from_table(t, combo)
         if type(src.ids) == "table" then for a, n in pairs(src.ids) do dst.ids[key(a)] = tonumber(n) or 0 end end
         if type(src.tail) == "table" then for a, n in pairs(src.tail) do dst.tail[key(a)] = tonumber(n) or 0 end end
         if type(src.facts) == "table" then dst.facts = src.facts end
+        if src.nohit == true then dst.nohit = true end          -- the step's move has no hitbox (a power-up)
         if type(src.samples) == "table" then
             for _, s in ipairs(src.samples) do
                 if type(s) == "table" then
@@ -101,7 +102,7 @@ function Profile:to_table()
         neutral = self.neutral, steps = {}, windows = {},
     }
     for k, st in ipairs(self.steps) do
-        out.steps[k] = { label = st.label, ids = st.ids, tail = st.tail, samples = st.samples, facts = st.facts }
+        out.steps[k] = { label = st.label, ids = st.ids, tail = st.tail, samples = st.samples, facts = st.facts, nohit = st.nohit }
         local w = self:window(k)
         out.windows[k] = w or { n = 0 }
     end

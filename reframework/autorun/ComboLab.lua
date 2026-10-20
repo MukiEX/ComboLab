@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.21.2"
+local VERSION = "1.21.3"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -196,6 +196,36 @@ local function load_session(id)
     S.stats = { n = 0, ok = 0, streak = 0, best = 0 }
 end
 
+-- Steps whose move never hits: a power-up like Juri's Feng Shui Engine
+-- activation (SA2, 214214P). They're timed like movement steps (the move
+-- coming out is the step), so they don't fail for not connecting. Known ones
+-- by fighter, plus any the frame data shows to have no hitbox (kept in the profile).
+local NO_HIT = {
+    [16] = { ["214214P"] = true, ["214214PP"] = true, SA2 = true },   -- Juri: Feng Shui Engine
+}
+local function step_no_hit(c, k, P)
+    local st = c.steps[k]
+    local f = NO_HIT[c.fighter_id or fighter_id or -1]
+    local l = tostring(st.label):upper():gsub("%s", "")
+    if f and f[l] then return true end
+    return P and P.steps[k] and P.steps[k].nohit == true
+end
+local function apply_no_hit(c, P)
+    for k, st in ipairs(c.steps) do
+        if st.kind == "hit" and (st.trigger.type or "button") == "button" and step_no_hit(c, k, P) then
+            st.kind, st.auto_move = "move", true
+            local ps = P and P.steps[k]
+            if ps and not ps.nohit then
+                -- first time: drop the "didn't connect" samples recorded while it was a hit step
+                local keep = {}
+                for _, smp in ipairs(ps.samples or {}) do if smp.res ~= "late" then keep[#keep + 1] = smp end end
+                ps.samples, ps.nohit = keep, true
+                P._win = {}
+            end
+        end
+    end
+end
+
 local function load_combo(id)
     for _, e in ipairs(combos) do
         if e.id == id then
@@ -204,6 +234,7 @@ local function load_combo(id)
             local raw = exists("profiles", c.id .. ".json") and json.load_file(profile_path(c.id)) or nil
             local prof, reset = Profile.from_table(raw, c)
             prof.ignore_spam = cfg.ignore_spam_samples
+            apply_no_hit(c, prof)
             S.combo, S.profile = c, prof
             S.tracker:set_combo(c, prof)
             S.last = nil
@@ -281,6 +312,37 @@ end
 
 local facts_done = {}     -- "combo:k" -> true once read from the game this session
 
+-- a step whose move has no attack hitbox at all, and that has never hit:
+-- time it as a movement step from now on
+local function mark_no_hit(k, f)
+    local P, c = S.profile, S.combo
+    local st = c and c.steps[k]
+    if not (P and st and f) or st.kind ~= "hit" or (st.trigger.type or "button") ~= "button" then return false end
+    -- only when attack data has been read for some move (so "none" is real)
+    if not MoveData.seen_atk or type(f.atk) ~= "table" or #f.atk > 0 or f.frame == nil then return false end
+    local seen = false
+    for _, smp in ipairs((P.steps[k] or {}).samples or {}) do
+        if smp.res == "ok" then return false end
+        if smp.act == f.id then seen = true end              -- it came out and didn't connect
+    end
+    if k == 1 then
+        if (P.successes or 0) > 0 then return false end
+    elseif not seen then return false end
+    st.kind, st.auto_move = "move", true
+    if P.steps[k] then
+        P.steps[k].nohit = true
+        -- its "didn't connect" samples were never real drops: forget them
+        local keep = {}
+        for _, smp in ipairs(P.steps[k].samples or {}) do if smp.act ~= f.id then keep[#keep + 1] = smp end end
+        P.steps[k].samples = keep
+        P._win = {}
+    end
+    flash(string.format("Step %d (%s) never hits (no hitbox): it's timed as a movement step now", k, st.label))
+    L("step %d %s: no attack hitbox in its frame data, treated as a movement step", k, st.label)
+    status_dirty = true
+    return true
+end
+
 local function refresh_facts()
     local P = S.profile
     if not cfg.predict or not P or not S.combo or not in_training or not fighter_id then return end
@@ -294,6 +356,8 @@ local function refresh_facts()
             local A = MoveData.facts(Game.user or 0, fighter_id, ida)
             if A then
                 local B = idb and MoveData.facts(Game.user or 0, fighter_id, idb) or nil
+                if mark_no_hit(k - 1, A) then changed = true end
+                if B and mark_no_hit(k, B) then changed = true end
                 local cancel = nil
                 if S.combo.steps[k].sep ~= "," and idb then cancel = MoveData.cancel_ranges(Game.user or 0, fighter_id, A, idb) end
                 P:set_facts(k, { a = summarize(A), b = summarize(B), cancel = cancel, ida = ida, idb = idb, fighter = fighter_id })
