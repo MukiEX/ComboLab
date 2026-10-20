@@ -540,7 +540,7 @@ function triggerText(t, control) {
 }
 /* =================== end parser =================== */
 
-const PAGE_VERSION = "1.22.3";
+const PAGE_VERSION = "1.22.4";
 const $ = (id) => document.getElementById(id);
 const arr = (x) => Array.isArray(x) ? x : [];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -2008,6 +2008,7 @@ function renderHubConnect(h) {
 let updBusy = false, updLast = null;
 function updSummary(r) {
   if (!r) return "";
+  if (r.older) return `<b style="color:var(--warning)">${esc(r.source || "The source")} has ${esc(r.remote_version || "?")}, older than this PC</b> <span class="muted">(not going back; rebuild the hub or push the repo, checked ${agoS(r.time)})</span>`;
   if (r.up_to_date) return `<span style="color:var(--good)">Up to date</span> <span class="muted">(${esc(r.remote_version || "?")}${r.commit ? " @" + esc(r.commit) : ""}, checked ${agoS(r.time)})</span>`;
   const n = (r.changed || []).length + (r.added || []).length;
   return `<b style="color:var(--warning)">${r.remote_version && r.remote_version !== r.local_version ? esc(r.remote_version) + " is available" : "Changed files available"}</b> <span class="muted">(${n} file${n === 1 ? "" : "s"}${r.commit ? ", @" + esc(r.commit) : ""}, checked ${agoS(r.time)})</span>`;

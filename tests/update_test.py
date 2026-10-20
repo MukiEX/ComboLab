@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Updater test: a PC with an old/edited install updates itself from a hub
 serving this repo's files, and from the repo over git.   python3 tests/update_test.py"""
-import json
+import json, re
 import os
 import shutil
 import socket
@@ -93,6 +93,24 @@ try:
         U.apply(data)
         r4, _, _ = U.check(data)
         check("reframework/autorun/combolab/motion.lua" not in r4["changed"], "git source applied")
+    # never back to an older version: this PC says it's newer than the source
+    lua = os.path.join(game, "reframework/autorun/ComboLab.lua")
+    with open(lua, encoding="utf-8") as f:
+        txt = f.read()
+    with open(lua, "w", encoding="utf-8") as f:
+        f.write(re.sub(r'local VERSION = "[^"]+"', 'local VERSION = "99.0.0"', txt))
+    r5, _, _ = U.check(data)
+    check(r5["older"] and r5["up_to_date"] and not r5["changed"], "older source: nothing to do")
+    try:
+        U.apply(data)
+        check(False, "older source refused")
+    except U.UpdateError as e:
+        check("older" in str(e), "older source refused: " + str(e))
+    with open(lua, encoding="utf-8") as f:
+        check('"99.0.0"' in f.read(), "nothing went back")
+    a2 = U.apply(data, force=True)
+    check("reframework/autorun/ComboLab.lua" in a2["written"], "forced: goes back")
+    check(U.version_key("1.22.3") > U.version_key("1.9.9") and U.version_key("x") is None, "version order")
 finally:
     hub.terminate()
     shutil.rmtree(tmp, ignore_errors=True)

@@ -24,7 +24,7 @@ import time
 import urllib.parse
 import urllib.request
 
-UPDATER_VERSION = "1.14.0"
+UPDATER_VERSION = "1.22.4"
 
 # Program files, relative to the game folder (the repo root has the same layout).
 CLIENT_PATTERNS = [
@@ -54,6 +54,12 @@ def sha256_file(path):
 def lua_version(text):
     m = re.search(r'local VERSION = "([^"]+)"', text)
     return m.group(1) if m else None
+
+
+def version_key(v):
+    """'1.22.3' -> (1, 22, 3); None when there's no version to compare."""
+    nums = re.findall(r"\d+", str(v or ""))
+    return tuple(int(n) for n in nums) if nums else None
 
 
 def build_manifest(root):
@@ -247,19 +253,30 @@ def check(data_root, source=None):
             added.append(rel)
         elif mine["sha256"] != info["sha256"]:
             changed.append(rel)
+    lk, rk = version_key(here["version"]), version_key(remote.get("version"))
+    older = bool(lk and rk and rk < lk)       # the source is behind this PC: never go back by accident
     res = {
         "source": src.label, "local_version": here["version"], "remote_version": remote.get("version"),
-        "commit": remote.get("commit"), "changed": changed, "added": added, "waiting": waiting,
-        "up_to_date": not changed and not added, "time": int(time.time()),
+        "commit": remote.get("commit"), "changed": [] if older else changed, "added": [] if older else added,
+        "waiting": waiting, "older": older,
+        "up_to_date": older or (not changed and not added), "time": int(time.time()),
     }
     save_settings(data_root, {"last_check": res})
     return res, remote, src
 
 
-def apply(data_root, source=None):
+def apply(data_root, source=None, force=False):
     """Downloads every changed file, checks it against the manifest, backs up
-    the current ones to .update/backup/<time>/ and swaps them in."""
+    the current ones to .update/backup/<time>/ and swaps them in. Refuses to
+    go back to an older version unless forced."""
     res, remote, src = check(data_root, source)
+    if res.get("older"):
+        if not force:
+            raise UpdateError("%s has %s, older than this PC's %s: not going back (update the hub or the repo first)"
+                              % (src.label, res["remote_version"], res["local_version"]))
+        here = build_manifest(game_root(data_root))
+        res["changed"] = [r for r, i in remote["files"].items() if is_client_path(r) and r in here["files"] and here["files"][r]["sha256"] != i["sha256"]]
+        res["added"] = [r for r in remote["files"] if is_client_path(r) and r not in here["files"]]
     todo = res["changed"] + res["added"]
     if not todo:
         return dict(res, written=[], side_by_side=[], restart=False)
@@ -310,7 +327,7 @@ def main(argv):
         return 0
     try:
         if argv[:1] == ["apply"]:
-            r = apply(data_root)
+            r = apply(data_root, force=("force" in argv[1:]))
             if not r["written"]:
                 print("Already up to date (%s)." % r["local_version"])
             else:

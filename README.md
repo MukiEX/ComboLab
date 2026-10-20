@@ -36,6 +36,7 @@ The **Hub Sync** tab has an **Updates** card: **Check for updates**, then **Upda
 - **From a git repo:** pick "A git repo" and enter its address (and a branch if it isn't the default). Needs git on the PC; a private repo needs its login set up in git (Git Credential Manager or an SSH key).
 - If the server scripts changed, the server restarts by itself in a new window and the page reloads. If the mod changed, reset scripts in game: REFramework menu (Insert) → ScriptRunner → **Reset scripts**.
 - A `.bat` file can't be replaced while it's running, so a changed one is saved next to it as `.new`; swap it in with the server closed.
+- It never goes back: if the hub or repo has an older version than this PC (a hub not rebuilt since your last push), it says so and changes nothing. `run_update.bat apply force` goes back on purpose.
 - Updates can only be started from the gaming PC itself (`http://localhost:41236`), or from any device when the server runs with `--token`, since they install code.
 - Without the page: `run_update.bat` (or `python combolab_update.py check | apply | source hub | source git <url> [branch]`).
 
