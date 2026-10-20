@@ -2,7 +2,7 @@
 -- Setup happens in reframework/data/ComboLab/ComboLab.html; this script runs the
 -- in-game side: per-frame tracking, timing profiles, overlay. Training mode only.
 
-local VERSION = "1.21.1"
+local VERSION = "1.21.2"
 
 -- safe mode: "use_hook": false in config.json samples once per rendered frame
 -- instead of hooking the game's input update (read before game.lua installs it)
@@ -96,6 +96,7 @@ end
 Profile.MACHINE = cfg.machine_id
 
 -- ---------------------------------------------------------------- state
+local dummy_rest = { idle = {}, same = 0, last = nil, t = nil }
 local S = {
     mode = cfg.mode, cfg = cfg, combo = nil, profile = nil, version = VERSION,
     tracker = Tracker.new({ timeout = cfg.timeout }),
@@ -858,6 +859,19 @@ re.on_frame(function()
     S.tick_clock = Game.tick_clock
     do
         local d = Game.diag
+        -- is the dummy down (a DI crumple, a knockdown)? Its resting actions are
+        -- learned: the first action it holds calmly, and any it holds for 3 s.
+        -- Song mode waits for it before the next count-in.
+        if d and d.o and d.t ~= dummy_rest.t then
+            dummy_rest.t = d.t
+            if d.o.act == dummy_rest.last then dummy_rest.same = dummy_rest.same + 1 else dummy_rest.same = 0 end
+            dummy_rest.last = d.o.act
+            local calm = (d.o.stun or 0) == 0 and (d.o.guard or 0) == 0 and (d.o.hitstop or 0) == 0
+            if calm and d.o.act ~= nil and ((dummy_rest.same >= 20 and next(dummy_rest.idle) == nil) or dummy_rest.same >= 180) then
+                dummy_rest.idle[d.o.act] = true
+            end
+            S.dummy_down = next(dummy_rest.idle) ~= nil and not dummy_rest.idle[d.o.act]
+        end
         S.stick_dir = d and d.u and d.u.dir or nil
         S.combo_hits = d and d.cc or 0
         S.combo_dmg = d and d.dmg or 0

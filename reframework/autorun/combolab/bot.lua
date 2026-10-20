@@ -135,6 +135,11 @@ function Bot:start(ids, opts)
     self.started_clock = os.clock()
     self.total_attempts = 0
     self.msg = nil
+    -- the dummy's resting actions (standing / crouching idle), learned as the
+    -- bot goes: an attempt only starts once the dummy is in one of them, so a
+    -- long stumble or knockdown (a Drive Impact crumple) plays out first
+    self.o_idle = {}
+    self.o_same = 0
     self.env.trace(string.format("start: %d combo(s), reps %d, sweet %s", #ids, self.reps, tostring(self.sweet)))
     self:next_combo()
 end
@@ -651,6 +656,8 @@ function Bot:observe(s)
     self.prev = s
     if not self.running then return end
     if (s.u.phys or 0) ~= 0 then return self:stop("controller input: hands off while the bot runs") end
+    -- how long the dummy has been in the same action
+    if prev and s.o.act ~= nil and s.o.act == prev.o.act then self.o_same = (self.o_same or 0) + 1 else self.o_same = 0 end
     -- quiet detector for resets
     if prev and (s.o.act ~= prev.o.act or s.u.act ~= prev.u.act or s.o.stun > 0 or s.o.guard > 0 or (s.o.hitstop or 0) > 0) then
         self.quiet = 0
@@ -704,7 +711,25 @@ function Bot:update()
     local now = self.now or 0
     if self.state == "prep" then
         local waited = now - (self.prep_t or now)
-        if (self.quiet or 0) >= 20 and waited >= 20 or waited > 420 then
+        -- wait for the dummy to be back on its feet: a crumple or a knockdown
+        -- can hold one action long enough to look "quiet"
+        local o = self.prev and self.prev.o
+        local idle = self.o_idle or {}
+        local up = true
+        if o and next(idle) then
+            up = idle[o.act] == true or (self.o_same or 0) >= 180     -- 3 s unchanged: a new resting pose (stance changed)
+        end
+        if (self.quiet or 0) >= 20 and waited >= 20 and not up and not self.told_wait then
+            self.told_wait = true
+            self.env.trace(string.format("waiting for the dummy to get back up (action %s)", tostring(o and o.act)))
+        end
+        if ((self.quiet or 0) >= 20 and waited >= 20 and up) or waited > 420 then
+            self.told_wait = nil
+            -- learn the resting action (not after a timeout: the dummy may still be down)
+            if o and o.act ~= nil and up and (o.stun or 0) == 0 and (o.guard or 0) == 0 then
+                self.o_idle = self.o_idle or {}
+                self.o_idle[o.act] = true
+            end
             self:do_teleport()
             self.state = "settle"
             self.settle_t = now

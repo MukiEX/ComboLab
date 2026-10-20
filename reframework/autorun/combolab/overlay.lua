@@ -442,6 +442,7 @@ function Overlay.song_update(S, live, now)
     if song and not live and now > song.T[N] + 240 then song = nil end
     if not song then
         if live or (S.result_age or 99) < 1.0 then S.song = nil return end
+        if S.dummy_down then S.song = nil; S.song_hint = "waiting for the dummy to get up" return end
         local B = math.max(12, cfg.song_beat or 30)
         song = { t0 = now, B = B, T = {} }
         S.song_seq = (S.song_seq or 0) + 1        -- a new count-in (ComboLab.lua may re-place the fighters)
