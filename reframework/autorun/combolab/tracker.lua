@@ -361,6 +361,11 @@ function Tracker:step_attempt(s, frame, new_inst)
             att.drop_t = s.t
             att.blocked = true
             att.fail = { step = c, kind = "blocked" }
+        elseif (s.o.stun or 0) > 0 or (s.o.hitstop or 0) > 0 then
+            -- the opponent is still reeling (a long crumple, a launch): the combo
+            -- is alive however long the next step takes, e.g. dashing up after a
+            -- punish-counter crumple; a real drop shows as the combo count resetting
+            att.last_progress = math.max(att.last_progress, s.t - math.floor(timeout / 2))
         elseif s.t - att.last_progress > timeout then
             att.drop_t = s.t
             att.fail = { step = c, kind = "timeout" }

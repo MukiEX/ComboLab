@@ -216,5 +216,19 @@ do
     end
 end
 
+-- 9) a long crumple: the next step 100 frames later is still part of the combo
+do
+    local c = { id = "crumple", version = 1, hash = "cr", steps = {
+        { label = "5MK", sep = "start", kind = "hit", trigger = { type = "button", mask = MK, mode = "all" } },
+        { label = "5HK", sep = ",", kind = "move", trigger = { type = "button", mask = HK, mode = "all" } },
+        { label = "2LP", sep = ",", kind = "hit", trigger = { type = "button", mask = LP, mode = "all" } },
+    } }
+    local p = Profile.new(c)
+    local tr = Tracker.new({ timeout = 90 })
+    tr:set_combo(c, p)
+    local r = run(tr, { { btn = MK, dir = 5, delay = 30 }, { btn = HK, dir = 5, delay = 100 }, { btn = LP, dir = 2, delay = 3 } }, 300)[1]
+    check(r and r.ok, "crumple: a slow follow-up isn't a timeout (" .. tostring(r and r.fail_step) .. " " .. tostring(r and r.steps[r.fail_step or 1] and r.steps[r.fail_step or 1].res) .. ")")
+end
+
 print(string.format("\n%d passed, %d failed", pass, fail))
 os.exit(fail == 0 and 0 or 1)
