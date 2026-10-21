@@ -5,7 +5,8 @@ local calls = {}
 local cur = { x = 0, y = 0 }
 local font_stack, fonts = {}, {}
 Vector2f = { new = function(x, y) return { x = x, y = y } end }
-local function fsize() return font_stack[#font_stack] or 13 end
+local WSCALE = 1
+local function fsize() return (font_stack[#font_stack] or 13) * WSCALE end
 draw = {
     filled_rect = function(x, y, w, h, c) calls[#calls + 1] = { "rect", x, y, w, h, c } end,
     outline_rect = function(x, y, w, h, c) calls[#calls + 1] = { "orect", x, y, w, h, c } end,
@@ -23,6 +24,7 @@ imgui = setmetatable({
     calc_text_size = function(s) return { x = #s * fsize() * 0.55, y = fsize() } end,
     text_colored = function(s, c) calls[#calls + 1] = { "text", cur.x, cur.y, s, c, fsize() } end,
     begin_window = function() return true end,
+    set_window_font_scale = function(k) WSCALE = k end,
 }, { __index = function() return function() end end })
 
 local Profile = require("combolab.profile")

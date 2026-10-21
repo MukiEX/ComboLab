@@ -24,7 +24,7 @@ import time
 import urllib.parse
 import urllib.request
 
-UPDATER_VERSION = "1.22.4"
+UPDATER_VERSION = "1.23.0"
 
 # Program files, relative to the game folder (the repo root has the same layout).
 CLIENT_PATTERNS = [
@@ -33,6 +33,7 @@ CLIENT_PATTERNS = [
     re.compile(r"^reframework/data/ComboLab/ComboLab\.html$"),
     re.compile(r"^reframework/data/ComboLab/combolab_[a-z_]+\.py$"),
     re.compile(r"^reframework/data/ComboLab/run_[a-z_]+\.bat$"),
+    re.compile(r"^reframework/fonts/ComboLab[-A-Za-z0-9_.]*\.(ttf|txt)$"),
 ]
 # A running .bat file is read by cmd.exe as it goes, so rewriting one under it
 # breaks it: a changed .bat goes next to the original as .new instead.
@@ -65,7 +66,7 @@ def version_key(v):
 def build_manifest(root):
     """Manifest of the program files under `root` (a game folder or a repo checkout)."""
     files = {}
-    for base in ("reframework/autorun", "reframework/data/ComboLab"):
+    for base in ("reframework/autorun", "reframework/data/ComboLab", "reframework/fonts"):
         d = os.path.join(root, base)
         if not os.path.isdir(d):
             continue

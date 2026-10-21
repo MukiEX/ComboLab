@@ -23,25 +23,58 @@ local C = {
 Overlay.C = C
 
 -- Fonts are loaded once when the script loads (REFramework can't add fonts to
--- ImGui's atlas mid-frame), then the nearest preloaded size is used.
--- (up to 4K with a big text size: the nearest preloaded size is used, so the
--- range has to cover what a 2160p screen at "Text size" 2 asks for)
-local FONT_SIZES = { 18, 22, 26, 32, 40, 48, 56, 66, 78, 92, 108 }
-local fonts = {}
-Overlay.fonts_ok = false
+-- ImGui's atlas mid-frame): ComboLab's own font (reframework/fonts/
+-- ComboLab-Bold.ttf, DejaVu Sans Bold) at a range of sizes, else ImGui's
+-- default. Each piece of text then asks for an exact pixel size: the nearest
+-- loaded font is pushed and the window's font scale makes up the rest, sized
+-- from the height the font really has. (Loading with no font file gave the
+-- default font at one size whatever size was asked for, so text never grew.)
+local FONT_FILE = "ComboLab-Bold.ttf"
+local FONT_SIZES = { 18, 24, 32, 44, 60, 80, 108 }
+local fonts = {}           -- px -> font
+Overlay.fonts_ok, Overlay.font_file = false, false
 for _, px in ipairs(FONT_SIZES) do
-    local ok, f = pcall(imgui.load_font, nil, px)
-    if ok and f ~= nil then fonts[px] = f; Overlay.fonts_ok = true end
+    local ok, f = pcall(imgui.load_font, FONT_FILE, px)
+    if ok and f ~= nil then fonts[px] = f; Overlay.fonts_ok = true; Overlay.font_file = true end
 end
+if not Overlay.fonts_ok then
+    local ok, f = pcall(imgui.load_font, nil, 24)
+    if ok and f ~= nil then fonts[24] = f; Overlay.fonts_ok = true end
+end
+local can_scale = imgui.set_window_font_scale ~= nil
 Overlay.text_scale = 1.0
+local fdesc = {}           -- rounded px -> { f = font or nil, px = wanted size }
 local function font(px)
-    px = px * (Overlay.text_scale or 1)
+    px = math.floor(px * (Overlay.text_scale or 1) + 0.5)
+    local d = fdesc[px]
+    if d then return d end
     local best, bd = nil, math.huge
     for size, f in pairs(fonts) do
-        local d = math.abs(size - px)
-        if d < bd then best, bd = f, d end
+        local dd = math.abs(size - px)
+        if size >= px then dd = dd * 0.5 end     -- scaling down stays crisp: prefer the bigger one
+        if dd < bd then best, bd = f, dd end
     end
-    return best
+    d = { f = best, px = px }
+    fdesc[px] = d
+    return d
+end
+
+-- the height a font really draws at (window scale 1)
+local base_h = {}
+local function height_of(d)
+    local key = d.f or "default"
+    local h = base_h[key]
+    if h then return h end
+    if d.f then imgui.push_font(d.f) end
+    local v = imgui.calc_text_size("Ag")
+    if d.f then imgui.pop_font() end
+    h = (v and v.y and v.y > 0) and v.y or 16
+    base_h[key] = h
+    return h
+end
+local function scale_of(d)
+    if not d or not can_scale then return 1 end
+    return d.px / height_of(d)
 end
 
 local RES_COLOR = {
@@ -59,12 +92,16 @@ Overlay.RES_TEXT = RES_TEXT
 -- --------------------------------------------------------------------------
 local function text_at(x, y, s, col, f)
     s = tostring(s):gsub("%%", "%%%%")   -- ImGui treats % as a format code
-    if f then imgui.push_font(f) end
-    imgui.set_cursor_pos(Vector2f.new(x + 2, y + 2))
+    local k = scale_of(f)
+    if f and f.f then imgui.push_font(f.f) end
+    if k ~= 1 then pcall(imgui.set_window_font_scale, k) end
+    local sh = math.max(2, (f and f.px or 16) * 0.08)
+    imgui.set_cursor_pos(Vector2f.new(x + sh, y + sh))
     imgui.text_colored(s, C.shadow)
     imgui.set_cursor_pos(Vector2f.new(x, y))
     imgui.text_colored(s, col)
-    if f then imgui.pop_font() end
+    if k ~= 1 then pcall(imgui.set_window_font_scale, 1.0) end
+    if f and f.f then imgui.pop_font() end
 end
 
 local function panel(x, y, w, h)
@@ -72,10 +109,11 @@ local function panel(x, y, w, h)
 end
 
 local function measure(s, f)
-    if f then imgui.push_font(f) end
+    if f and f.f then imgui.push_font(f.f) end
     local v = imgui.calc_text_size(s)
-    if f then imgui.pop_font() end
-    return v.x, v.y
+    if f and f.f then imgui.pop_font() end
+    local k = scale_of(f)
+    return v.x * k, v.y * k
 end
 
 local function with_alpha(col, a)
@@ -1483,18 +1521,21 @@ function Overlay.draw(S)
     local aaa_on = S.mode == "train" and view == "aaa" and N >= 2 and S.profile ~= nil
     local bar_on = not ((notes_on and view == "notes") or fix_on or aaa_on)
     local note_labels, notes_bottom = nil, nil
+    -- room for the text lines above a note view, at the current text size
+    local _, lh_mid = measure("Ag", font(32 * sc))
+    local _, lh_big = measure("Ag", font(34 * sc))
     -- note view layout: [bar] / notation line / ring / result
     local notes_ny = nil
     if notes_on then
         notes_ny = bar_on and (by + bh + 34 * sc) or by
-        note_labels, notes_bottom = Overlay.notes(S, W, H, sc, notes_ny + 56 * sc)
+        note_labels, notes_bottom = Overlay.notes(S, W, H, sc, notes_ny + math.max(56 * sc, lh_mid + 22 * sc))
     elseif fix_on then
         -- notation line, then the result line, then the lanes
         notes_ny = by
-        note_labels = Overlay.fixation(S, W, H, sc, by + 110 * sc)
+        note_labels = Overlay.fixation(S, W, H, sc, by + math.max(110 * sc, lh_mid + lh_big + 46 * sc))
     elseif aaa_on then
         notes_ny = by
-        note_labels = Overlay.apple(S, W, H, sc, by + 110 * sc)
+        note_labels = Overlay.apple(S, W, H, sc, by + math.max(110 * sc, lh_mid + lh_big + 46 * sc))
     end
     if N >= 2 and bar_on then
         local gap = 6 * sc
@@ -1649,9 +1690,7 @@ function Overlay.draw(S)
     local flags = 1 | 2 | 4 | 8 | 16 | 128 | 256 | 512 | 4096 | 8192 | 786432
     imgui.push_style_var(4, 0.0) -- window border
     if imgui.begin_window("##combolab_overlay", true, flags) then
-        if not Overlay.fonts_ok and imgui.set_window_font_scale then
-            pcall(imgui.set_window_font_scale, 1.6 * sc * (Overlay.text_scale or 1))
-        end
+        pcall(imgui.set_window_font_scale, 1.0)
 
         -- mode tag
         local tag = ((S.mode == "train") and "TRAIN" or "DEVELOP") .. "  v" .. (S.version or "?")
